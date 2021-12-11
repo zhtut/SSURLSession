@@ -5,3 +5,5 @@
 
 let resolve = "\(host):443:\(ip)"
 setValue(resolve, forHTTPHeaderField: "resolve")
+
+支持SNI功能，用于IP直连
