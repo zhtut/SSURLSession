@@ -1,0 +1,2 @@
+# SSURLSession
+对swift的URLSession进行拆分，增加支持设置resolve和connectTo的能力
