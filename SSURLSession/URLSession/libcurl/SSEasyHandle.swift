@@ -177,6 +177,7 @@ extension _SSEasyHandle {
     func set(connectTo: String) {
         let list = _CurlStringList([connectTo])
         try! CFURLSession_easy_setopt_ptr(rawHandle, CFURLSessionOptionCONNECT_TO, list.asUnsafeMutablePointer).asError()
+        connectToList = list
     }
     
     func set(resolve: String) {
