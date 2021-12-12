@@ -1,0 +1,16 @@
+{
+  "object": {
+    "pins": [
+      {
+        "package": "curl",
+        "repositoryURL": "https://github.com/zhtut/curl.git",
+        "state": {
+          "branch": null,
+          "revision": "55c598b4c542fa39424ec5fb2fbe7327478ca9f2",
+          "version": "7.80.0"
+        }
+      }
+    ]
+  },
+  "version": 1
+}
