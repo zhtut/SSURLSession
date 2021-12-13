@@ -406,8 +406,9 @@ internal class _SSHTTPURLProtocol: _SSNativeProtocol {
         //TODO: the timeout value needs to be reset on every data transfer
 
         var timeoutInterval = Int(httpSession.configuration.timeoutIntervalForRequest) * 1000
-        if request.timeoutInterval > 0 {
-            timeoutInterval = Int(request.timeoutInterval) * 1000
+        let requestTimeOut = request.timeoutInterval
+        if !requestTimeOut.isInfinite && !requestTimeOut.isNaN && request.timeoutInterval > 0 {
+            timeoutInterval = Int(requestTimeOut) * 1000
         }
         let timeoutHandler = DispatchWorkItem { [weak self] in
             guard let self = self, let task = self.task else {
