@@ -9,47 +9,47 @@
 
 /*
  
- SSURLSession is a replacement API for URLConnection.  It provides
+ URLSession is a replacement API for URLConnection.  It provides
  options that affect the policy of, and various aspects of the
  mechanism by which NSURLRequest objects are retrieved from the
  network.
  
- An SSURLSession may be bound to a delegate object.  The delegate is
+ An URLSession may be bound to a delegate object.  The delegate is
  invoked for certain events during the lifetime of a session, such as
  server authentication or determining whether a resource to be loaded
  should be converted into a download.
  
- SSURLSession instances are threadsafe.
+ URLSession instances are threadsafe.
  
- The default SSURLSession uses a system provided delegate and is
+ The default URLSession uses a system provided delegate and is
  appropriate to use in place of existing code that uses
  +[NSURLConnection sendAsynchronousRequest:queue:completionHandler:]
  
- An SSURLSession creates SSURLSessionTask objects which represent the
+ An URLSession creates URLSessionTask objects which represent the
  action of a resource being loaded.  These are analogous to
  NSURLConnection objects but provide for more control and a unified
  delegate model.
  
- SSURLSessionTask objects are always created in a suspended state and
+ URLSessionTask objects are always created in a suspended state and
  must be sent the -resume message before they will execute.
  
- Subclasses of SSURLSessionTask are used to syntactically
+ Subclasses of URLSessionTask are used to syntactically
  differentiate between data and file downloads.
  
- An SSURLSessionDataTask receives the resource as a series of calls to
- the SSURLSession:dataTask:didReceiveData: delegate method.  This is type of
+ An URLSessionDataTask receives the resource as a series of calls to
+ the URLSession:dataTask:didReceiveData: delegate method.  This is type of
  task most commonly associated with retrieving objects for immediate parsing
  by the consumer.
  
- An SSURLSessionUploadTask differs from an SSURLSessionDataTask
+ An URLSessionUploadTask differs from an URLSessionDataTask
  in how its instance is constructed.  Upload tasks are explicitly created
  by referencing a file or data object to upload, or by utilizing the
- -SSURLSession:task:needNewBodyStream: delegate message to supply an upload
+ -URLSession:task:needNewBodyStream: delegate message to supply an upload
  body.
  
  An URLSessionDownloadTask will directly write the response data to
  a temporary file.  When completed, the delegate is sent
- SSURLSession:downloadTask:didFinishDownloadingToURL: and given an opportunity
+ URLSession:downloadTask:didFinishDownloadingToURL: and given an opportunity
  to move this file to a permanent location in its sandboxed container, or to
  otherwise read the file. If canceled, an URLSessionDownloadTask can
  produce a data blob that can be used to resume a download at a later
@@ -60,7 +60,7 @@
  to a given host and port with optional secure handshaking and
  navigation of proxies.  Data tasks may also be upgraded to a
  URLSessionStream task via the HTTP Upgrade: header and appropriate
- use of the pipelining option of SSURLSessionConfiguration.  See RFC
+ use of the pipelining option of URLSessionConfiguration.  See RFC
  2817 and RFC 6455 for information about the Upgrade: header, and
  comments below on turning data tasks into stream tasks.
  */
@@ -72,34 +72,34 @@
 
 /*
  
- SSURLSession is not available for i386 targets before Mac OS X 10.10.
+ URLSession is not available for i386 targets before Mac OS X 10.10.
  
  */
 
 
 // -----------------------------------------------------------------------------
-/// # SSURLSession API implementation overview
+/// # URLSession API implementation overview
 ///
 /// ## Design Overview
 ///
 /// This implementation uses libcurl for the HTTP layer implementation. At a
-/// high level, the `SSURLSession` keeps a *multi handle*, and each
-/// `SSURLSessionTask` has an *easy handle*. This way these two APIs somewhat
+/// high level, the `URLSession` keeps a *multi handle*, and each
+/// `URLSessionTask` has an *easy handle*. This way these two APIs somewhat
 /// have a 1-to-1 mapping.
 ///
-/// The `SSURLSessionTask` class is in charge of configuring its *easy handle*
+/// The `URLSessionTask` class is in charge of configuring its *easy handle*
 /// and adding it to the owning session’s *multi handle*. Adding / removing
 /// the handle effectively resumes / suspends the transfer.
 ///
-/// The `SSURLSessionTask` class has subclasses, but this design puts all the
-/// logic into the parent `SSURLSessionTask`.
+/// The `URLSessionTask` class has subclasses, but this design puts all the
+/// logic into the parent `URLSessionTask`.
 ///
-/// Both the `SSURLSession` and `SSURLSessionTask` extensively use helper
+/// Both the `URLSession` and `URLSessionTask` extensively use helper
 /// types to ease testability, separate responsibilities, and improve
-/// readability. These types are nested inside the `SSURLSession` and
-/// `SSURLSessionTask` to limit their scope. Some of these even have sub-types.
+/// readability. These types are nested inside the `URLSession` and
+/// `URLSessionTask` to limit their scope. Some of these even have sub-types.
 ///
-/// The session class uses the `SSURLSession.TaskRegistry` to keep track of its
+/// The session class uses the `URLSession.TaskRegistry` to keep track of its
 /// tasks.
 ///
 /// The task class uses an `InternalState` type together with `TransferState` to
@@ -125,9 +125,9 @@
 ///
 /// ## Threading
 ///
-/// The SSURLSession has a libdispatch ‘work queue’, and all internal work is
+/// The URLSession has a libdispatch ‘work queue’, and all internal work is
 /// done on that queue, such that the code doesn't have to deal with thread
-/// safety beyond that. All work inside a `SSURLSessionTask` will run on this
+/// safety beyond that. All work inside a `URLSessionTask` will run on this
 /// work queue, and so will code manipulating the session's *multi handle*.
 ///
 /// Delegate callbacks are, however, done on the passed in
@@ -135,18 +135,18 @@
 /// queue’ as needed.
 ///
 /// - SeeAlso: https://curl.haxx.se/libcurl/c/threadsafe.html
-/// - SeeAlso: SSURLSession+libcurl.swift
+/// - SeeAlso: URLSession+libcurl.swift
 ///
 /// ## HTTP and RFC 2616
 ///
 /// Most of HTTP is defined in [RFC 2616](https://tools.ietf.org/html/rfc2616).
 /// While libcurl handles many of these details, some are handled by this
-/// SSURLSession implementation.
+/// URLSession implementation.
 ///
 /// ## To Do
 ///
 /// - TODO: Is is not clear if using API that takes a URLRequest will override
-/// all settings of the SSURLSessionConfiguration or just those that have not
+/// all settings of the URLSessionConfiguration or just those that have not
 /// explicitly been set.
 /// E.g. creating an URLRequest will cause it to have the default timeoutInterval
 /// of 60 seconds, but should this be used in stead of the configuration's
@@ -154,7 +154,7 @@
 /// been set explicitly?
 ///
 /// - TODO: We could re-use EasyHandles once they're complete. That'd be a
-/// performance optimization. Not sure how much that'd help. The SSURLSession
+/// performance optimization. Not sure how much that'd help. The URLSession
 /// would have to keep a pool of unused handles.
 ///
 /// - TODO: Could make `workQueue` concurrent and use a multiple reader / single
@@ -163,13 +163,13 @@
 
 
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
-import Foundation
+import SwiftFoundation
 #else
 import Foundation
 #endif
 @_implementationOnly import CoreFoundation
 
-extension SSURLSession {
+extension URLSession {
     public enum DelayedRequestDisposition {
         case cancel
         case continueLoading
@@ -177,7 +177,7 @@ extension SSURLSession {
     }
 }
 
-fileprivate let globalVarSyncQ = DispatchQueue(label: "org.swift.Foundation.SSURLSession.GlobalVarSyncQ")
+fileprivate let globalVarSyncQ = DispatchQueue(label: "org.swift.Foundation.URLSession.GlobalVarSyncQ")
 fileprivate var sessionCounter = Int32(0)
 fileprivate func nextSessionIdentifier() -> Int32 {
     return globalVarSyncQ.sync {
@@ -187,70 +187,69 @@ fileprivate func nextSessionIdentifier() -> Int32 {
 }
 public let NSURLSessionTransferSizeUnknown: Int64 = -1
 
-@objc
-open class SSURLSession : NSObject {
+open class URLSession : NSObject {
     internal let _configuration: _Configuration
     fileprivate let multiHandle: _MultiHandle
     fileprivate var nextTaskIdentifier = 1
     internal let workQueue: DispatchQueue 
-    internal let taskRegistry = SSURLSession._TaskRegistry()
+    internal let taskRegistry = URLSession._TaskRegistry()
     fileprivate let identifier: Int32
     fileprivate var invalidated = false
     fileprivate static let registerProtocols: () = {
         // TODO: We register all the native protocols here.
-        _ = SSURLProtocol.registerClass(_SSHTTPURLProtocol.self)
+        _ = URLProtocol.registerClass(_HTTPURLProtocol.self)
+        _ = URLProtocol.registerClass(_FTPURLProtocol.self)
+        _ = URLProtocol.registerClass(_DataURLProtocol.self)
     }()
     
     /*
-     * The shared session uses the currently set global SSURLCache,
+     * The shared session uses the currently set global URLCache,
      * HTTPCookieStorage and URLCredential.Storage objects.
      */
-    @objc
-    open class var shared: SSURLSession {
+    open class var shared: URLSession {
         return _shared
     }
-    
-    fileprivate static let _shared: SSURLSession = {
-        var configuration = SSURLSessionConfiguration.default
+
+    fileprivate static let _shared: URLSession = {
+        var configuration = URLSessionConfiguration.default
         configuration.httpCookieStorage = HTTPCookieStorage.shared
-        configuration.protocolClasses = SSURLProtocol.getProtocols()
-        return SSURLSession(configuration: configuration, delegate: nil, delegateQueue: nil)
+        configuration.protocolClasses = URLProtocol.getProtocols()
+        return URLSession(configuration: configuration, delegate: nil, delegateQueue: nil)
     }()
 
     /*
-     * Customization of SSURLSession occurs during creation of a new session.
+     * Customization of URLSession occurs during creation of a new session.
      * If you only need to use the convenience routines with custom
      * configuration options it is not necessary to specify a delegate.
      * If you do specify a delegate, the delegate will be retained until after
-     * the delegate has been sent the SSURLSession:didBecomeInvalidWithError: message.
+     * the delegate has been sent the URLSession:didBecomeInvalidWithError: message.
      */
-    @objc
-    public /*not inherited*/ init(configuration: SSURLSessionConfiguration) {
+    public /*not inherited*/ init(configuration: URLSessionConfiguration) {
         initializeLibcurl()
         identifier = nextSessionIdentifier()
-        self.workQueue = DispatchQueue(label: "SSURLSession<\(identifier)>")
+        self.workQueue = DispatchQueue(label: "URLSession<\(identifier)>")
         self.delegateQueue = OperationQueue()
         self.delegateQueue.maxConcurrentOperationCount = 1
         self.delegate = nil
         //TODO: Make sure this one can't be written to?
-        // Could create a subclass of SSURLSessionConfiguration that wraps the
-        // SSURLSession._Configuration and with fatalError() in all setters.
-        self.configuration = configuration.copy() as! SSURLSessionConfiguration
-        let c = SSURLSession._Configuration(SSURLSessionConfiguration: configuration)
+        // Could create a subclass of URLSessionConfiguration that wraps the
+        // URLSession._Configuration and with fatalError() in all setters.
+        self.configuration = configuration.copy() as! URLSessionConfiguration
+        let c = URLSession._Configuration(URLSessionConfiguration: configuration)
         self._configuration = c
         self.multiHandle = _MultiHandle(configuration: c, workQueue: workQueue)
-        // registering all the protocol classes with SSURLProtocol
-        let _ = SSURLSession.registerProtocols
+        // registering all the protocol classes with URLProtocol
+        let _ = URLSession.registerProtocols
     }
 
     /*
      * A delegate queue should be serial to ensure correct ordering of callbacks.
      * However, if user supplies a concurrent delegateQueue it is not converted to serial.
      */
-    public /*not inherited*/ init(configuration: SSURLSessionConfiguration, delegate: SSURLSessionDelegate?, delegateQueue queue: OperationQueue?) {
+    public /*not inherited*/ init(configuration: URLSessionConfiguration, delegate: URLSessionDelegate?, delegateQueue queue: OperationQueue?) {
         initializeLibcurl()
         identifier = nextSessionIdentifier()
-        self.workQueue = DispatchQueue(label: "SSURLSession<\(identifier)>")
+        self.workQueue = DispatchQueue(label: "URLSession<\(identifier)>")
         if let _queue = queue {
            self.delegateQueue = _queue
         } else {
@@ -259,19 +258,19 @@ open class SSURLSession : NSObject {
         }
         self.delegate = delegate
         //TODO: Make sure this one can't be written to?
-        // Could create a subclass of SSURLSessionConfiguration that wraps the
-        // SSURLSession._Configuration and with fatalError() in all setters.
-        self.configuration = configuration.copy() as! SSURLSessionConfiguration
-        let c = SSURLSession._Configuration(SSURLSessionConfiguration: configuration)
+        // Could create a subclass of URLSessionConfiguration that wraps the
+        // URLSession._Configuration and with fatalError() in all setters.
+        self.configuration = configuration.copy() as! URLSessionConfiguration
+        let c = URLSession._Configuration(URLSessionConfiguration: configuration)
         self._configuration = c
         self.multiHandle = _MultiHandle(configuration: c, workQueue: workQueue)
-        // registering all the protocol classes with SSURLProtocol
-        let _ = SSURLSession.registerProtocols
+        // registering all the protocol classes with URLProtocol
+        let _ = URLSession.registerProtocols
     }
     
     open private(set) var delegateQueue: OperationQueue
-    open private(set) var delegate: SSURLSessionDelegate?
-    open private(set) var configuration: SSURLSessionConfiguration
+    open private(set) var delegate: URLSessionDelegate?
+    open private(set) var configuration: URLSessionConfiguration
     
     /*
      * The sessionDescription property is available for the developer to
@@ -281,17 +280,16 @@ open class SSURLSession : NSObject {
     
     /* -finishTasksAndInvalidate returns immediately and existing tasks will be allowed
      * to run to completion.  New tasks may not be created.  The session
-     * will continue to make delegate callbacks until SSURLSession:didBecomeInvalidWithError:
+     * will continue to make delegate callbacks until URLSession:didBecomeInvalidWithError:
      * has been issued.
      *
      * -finishTasksAndInvalidate and -invalidateAndCancel do not
      * have any effect on the shared session singleton.
      *
      * When invalidating a background session, it is not safe to create another background
-     * session with the same identifier until SSURLSession:didBecomeInvalidWithError: has
+     * session with the same identifier until URLSession:didBecomeInvalidWithError: has
      * been issued.
      */
-    @objc
     open func finishTasksAndInvalidate() {
        //we need to return immediately
        workQueue.async {
@@ -321,13 +319,12 @@ open class SSURLSession : NSObject {
      * cancellation is subject to the state of the task, and some tasks may
      * have already have completed at the time they are sent -cancel.
      */
-    @objc
     open func invalidateAndCancel() {
         /*
          As per documentation,
          Calling this method on the session returned by the sharedSession method has no effect.
          */
-        guard self !== SSURLSession.shared else { return }
+        guard self !== URLSession.shared else { return }
         
         workQueue.sync {
             self.invalidated = true
@@ -349,7 +346,6 @@ open class SSURLSession : NSObject {
     }
     
     /* empty all cookies, cache and credential stores, removes disk files, issues -flushWithCompletionHandler:. Invokes completionHandler() on the delegate queue. */
-    @objc
     open func reset(completionHandler: @escaping () -> Void) {
         let configuration = self.configuration
         
@@ -368,7 +364,6 @@ open class SSURLSession : NSObject {
     }
     
      /* flush storage to disk and clear transient network caches.  Invokes completionHandler() on the delegate queue. */
-    @objc
     open func flush(completionHandler: @escaping () -> Void) {
         // We create new CURL handles every request.
         delegateQueue.addOperation {
@@ -376,21 +371,25 @@ open class SSURLSession : NSObject {
         }
     }
 
+    @available(*, unavailable, renamed: "getTasksWithCompletionHandler(_:)")
+    open func getTasksWithCompletionHandler(completionHandler: @escaping ([URLSessionDataTask], [URLSessionUploadTask], [URLSessionDownloadTask]) -> Void) {
+        getTasksWithCompletionHandler(completionHandler)
+    }
+
     /* invokes completionHandler with outstanding data, upload and download tasks. */
-    @objc
-    open func getTasksWithCompletionHandler(_ completionHandler: @escaping ([SSURLSessionDataTask], [SSURLSessionUploadTask], [URLSessionDownloadTask]) -> Void)  {
+    open func getTasksWithCompletionHandler(_ completionHandler: @escaping ([URLSessionDataTask], [URLSessionUploadTask], [URLSessionDownloadTask]) -> Void)  {
         workQueue.async {
             self.delegateQueue.addOperation {
-                var dataTasks = [SSURLSessionDataTask]()
-                var uploadTasks = [SSURLSessionUploadTask]()
+                var dataTasks = [URLSessionDataTask]()
+                var uploadTasks = [URLSessionUploadTask]()
                 var downloadTasks = [URLSessionDownloadTask]()
 
                 for task in self.taskRegistry.allTasks {
                     guard task.state == .running || task.isSuspendedAfterResume else { continue }
 
-                    if let uploadTask = task as? SSURLSessionUploadTask {
+                    if let uploadTask = task as? URLSessionUploadTask {
                         uploadTasks.append(uploadTask)
-                    } else if let dataTask = task as? SSURLSessionDataTask {
+                    } else if let dataTask = task as? URLSessionDataTask {
                         dataTasks.append(dataTask)
                     } else if let downloadTask = task as? URLSessionDownloadTask {
                         downloadTasks.append(downloadTask)
@@ -404,8 +403,7 @@ open class SSURLSession : NSObject {
     }
     
     /* invokes completionHandler with all outstanding tasks. */
-    @objc
-    open func getAllTasks(completionHandler: @escaping ([SSURLSessionTask]) -> Void)  {
+    open func getAllTasks(completionHandler: @escaping ([URLSessionTask]) -> Void)  {
         workQueue.async {
             self.delegateQueue.addOperation {
                 completionHandler(self.taskRegistry.allTasks.filter { $0.state == .running || $0.isSuspendedAfterResume })
@@ -414,18 +412,17 @@ open class SSURLSession : NSObject {
     }
     
     /*
-     * SSURLSessionTask objects are always created in a suspended state and
+     * URLSessionTask objects are always created in a suspended state and
      * must be sent the -resume message before they will execute.
      */
     
     /* Creates a data task with the given request.  The request may have a body stream. */
-    @objc
-    open func dataTask(with request: URLRequest) -> SSURLSessionDataTask {
+    open func dataTask(with request: URLRequest) -> URLSessionDataTask {
         return dataTask(with: _Request(request), behaviour: .callDelegate)
     }
     
     /* Creates a data task to retrieve the contents of the given URL. */
-    open func dataTask(with url: URL) -> SSURLSessionDataTask {
+    open func dataTask(with url: URL) -> URLSessionDataTask {
         return dataTask(with: _Request(url), behaviour: .callDelegate)
     }
 
@@ -437,54 +434,47 @@ open class SSURLSession : NSObject {
      * see <Foundation/NSURLError.h>.  The delegate, if any, will still be
      * called for authentication challenges.
      */
-    @objc
-    open func dataTask(with request: URLRequest, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> SSURLSessionDataTask {
+    open func dataTask(with request: URLRequest, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTask {
         return dataTask(with: _Request(request), behaviour: .dataCompletionHandler(completionHandler))
     }
 
-    open func dataTask(with url: URL, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> SSURLSessionDataTask {
+    open func dataTask(with url: URL, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTask {
         return dataTask(with: _Request(url), behaviour: .dataCompletionHandler(completionHandler))
     }
     
     /* Creates an upload task with the given request.  The body of the request will be created from the file referenced by fileURL */
-    @objc
-    open func uploadTask(with request: URLRequest, fromFile fileURL: URL) -> SSURLSessionUploadTask {
-        let r = SSURLSession._Request(request)
+    open func uploadTask(with request: URLRequest, fromFile fileURL: URL) -> URLSessionUploadTask {
+        let r = URLSession._Request(request)
         return uploadTask(with: r, body: .file(fileURL), behaviour: .callDelegate)
     }
     
     /* Creates an upload task with the given request.  The body of the request is provided from the bodyData. */
-    @objc
-    open func uploadTask(with request: URLRequest, from bodyData: Data) -> SSURLSessionUploadTask {
-        let r = SSURLSession._Request(request)
+    open func uploadTask(with request: URLRequest, from bodyData: Data) -> URLSessionUploadTask {
+        let r = URLSession._Request(request)
         return uploadTask(with: r, body: .data(createDispatchData(bodyData)), behaviour: .callDelegate)
     }
     
-    /* Creates an upload task with the given request.  The previously set body stream of the request (if any) is ignored and the SSURLSession:task:needNewBodyStream: delegate will be called when the body payload is required. */
-    @objc
-    open func uploadTask(withStreamedRequest request: URLRequest) -> SSURLSessionUploadTask {
-        let r = SSURLSession._Request(request)
+    /* Creates an upload task with the given request.  The previously set body stream of the request (if any) is ignored and the URLSession:task:needNewBodyStream: delegate will be called when the body payload is required. */
+    open func uploadTask(withStreamedRequest request: URLRequest) -> URLSessionUploadTask {
+        let r = URLSession._Request(request)
         return uploadTask(with: r, body: nil, behaviour: .callDelegate)
     }
 
     /*
      * upload convenience method.
      */
-    @objc
-    open func uploadTask(with request: URLRequest, fromFile fileURL: URL, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> SSURLSessionUploadTask {
-        let r = SSURLSession._Request(request)
+    open func uploadTask(with request: URLRequest, fromFile fileURL: URL, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionUploadTask {
+        let r = URLSession._Request(request)
         return uploadTask(with: r, body: .file(fileURL), behaviour: .dataCompletionHandler(completionHandler))
     }
 
-    @objc
-    open func uploadTask(with request: URLRequest, from bodyData: Data?, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> SSURLSessionUploadTask {
+    open func uploadTask(with request: URLRequest, from bodyData: Data?, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionUploadTask {
         return uploadTask(with: _Request(request), body: .data(createDispatchData(bodyData!)), behaviour: .dataCompletionHandler(completionHandler))
     }
     
     /* Creates a download task with the given request. */
-    @objc
     open func downloadTask(with request: URLRequest) -> URLSessionDownloadTask {
-        let r = SSURLSession._Request(request)
+        let r = URLSession._Request(request)
         return downloadTask(with: r, behavior: .callDelegate)
     }
     
@@ -493,8 +483,7 @@ open class SSURLSession : NSObject {
         return downloadTask(with: _Request(url), behavior: .callDelegate)
     }
     
-    /* Creates a download task with the resume data.  If the download cannot be successfully resumed, SSURLSession:task:didCompleteWithError: will be called. */
-    @objc
+    /* Creates a download task with the resume data.  If the download cannot be successfully resumed, URLSession:task:didCompleteWithError: will be called. */
     open func downloadTask(withResumeData resumeData: Data) -> URLSessionDownloadTask {
         return invalidDownloadTask(behavior: .callDelegate)
     }
@@ -505,7 +494,6 @@ open class SSURLSession : NSObject {
      * copied during the invocation of the completion routine.  The file
      * will be removed automatically.
      */
-    @objc
     open func downloadTask(with request: URLRequest, completionHandler: @escaping (URL?, URLResponse?, Error?) -> Void) -> URLSessionDownloadTask {
         return downloadTask(with: _Request(request), behavior: .downloadCompletionHandler(completionHandler))
     }
@@ -514,25 +502,29 @@ open class SSURLSession : NSObject {
        return downloadTask(with: _Request(url), behavior: .downloadCompletionHandler(completionHandler))
     }
 
-    @objc
     open func downloadTask(withResumeData resumeData: Data, completionHandler: @escaping (URL?, URLResponse?, Error?) -> Void) -> URLSessionDownloadTask {
         return invalidDownloadTask(behavior: .downloadCompletionHandler(completionHandler))
     }
+    
+    /* Creates a bidirectional stream task to a given host and port.
+     */
+    @available(*, unavailable, message: "URLSessionStreamTask is not available in swift-corelibs-foundation")
+    open func streamTask(withHostName hostname: String, port: Int) -> URLSessionStreamTask { NSUnsupported() }
 }
 
 
 // Helpers
-fileprivate extension SSURLSession {
+fileprivate extension URLSession {
     enum _Request {
         case request(URLRequest)
         case url(URL)
     }
-    func createConfiguredRequest(from request: SSURLSession._Request) -> URLRequest {
+    func createConfiguredRequest(from request: URLSession._Request) -> URLRequest {
         let r = request.createMutableURLRequest()
         return _configuration.configure(request: r)
     }
 }
-extension SSURLSession._Request {
+extension URLSession._Request {
     init(_ url: URL) {
         self = .url(url)
     }
@@ -540,7 +532,7 @@ extension SSURLSession._Request {
         self = .request(request)
     }
 }
-extension SSURLSession._Request {
+extension URLSession._Request {
     func createMutableURLRequest() -> URLRequest {
         switch self {
         case .url(let url): return URLRequest(url: url)
@@ -549,7 +541,7 @@ extension SSURLSession._Request {
     }
 }
 
-fileprivate extension SSURLSession {
+fileprivate extension URLSession {
     func createNextTaskIdentifier() -> Int {
         return workQueue.sync {
             let i = nextTaskIdentifier
@@ -559,15 +551,15 @@ fileprivate extension SSURLSession {
     }
 }
 
-fileprivate extension SSURLSession {
+fileprivate extension URLSession {
     /// Create a data task.
     ///
     /// All public methods funnel into this one.
-    func dataTask(with request: _Request, behaviour: _TaskRegistry._Behaviour) -> SSURLSessionDataTask {
+    func dataTask(with request: _Request, behaviour: _TaskRegistry._Behaviour) -> URLSessionDataTask {
         guard !self.invalidated else { fatalError("Session invalidated") }
         let r = createConfiguredRequest(from: request)
         let i = createNextTaskIdentifier()
-        let task = SSURLSessionDataTask(session: self, request: r, taskIdentifier: i)
+        let task = URLSessionDataTask(session: self, request: r, taskIdentifier: i)
         workQueue.async {
             self.taskRegistry.add(task, behaviour: behaviour)
         }
@@ -577,11 +569,11 @@ fileprivate extension SSURLSession {
     /// Create an upload task.
     ///
     /// All public methods funnel into this one.
-    func uploadTask(with request: _Request, body: SSURLSessionTask._Body?, behaviour: _TaskRegistry._Behaviour) -> SSURLSessionUploadTask {
+    func uploadTask(with request: _Request, body: URLSessionTask._Body?, behaviour: _TaskRegistry._Behaviour) -> URLSessionUploadTask {
         guard !self.invalidated else { fatalError("Session invalidated") }
         let r = createConfiguredRequest(from: request)
         let i = createNextTaskIdentifier()
-        let task = SSURLSessionUploadTask(session: self, request: r, taskIdentifier: i, body: body)
+        let task = URLSessionUploadTask(session: self, request: r, taskIdentifier: i, body: body)
         workQueue.async {
             self.taskRegistry.add(task, behaviour: behaviour)
         }
@@ -616,30 +608,30 @@ fileprivate extension SSURLSession {
     }
 }
 
-internal extension SSURLSession {
+internal extension URLSession {
     /// The kind of callback / delegate behaviour of a task.
     ///
-    /// This is similar to the `SSURLSession.TaskRegistry.Behaviour`, but it
+    /// This is similar to the `URLSession.TaskRegistry.Behaviour`, but it
     /// also encodes the kind of delegate that the session has.
     enum _TaskBehaviour {
-        /// The session has no delegate, or just a plain `SSURLSessionDelegate`.
+        /// The session has no delegate, or just a plain `URLSessionDelegate`.
         case noDelegate
-        /// The session has a delegate of type `SSURLSessionTaskDelegate`
-        case taskDelegate(SSURLSessionTaskDelegate)
+        /// The session has a delegate of type `URLSessionTaskDelegate`
+        case taskDelegate(URLSessionTaskDelegate)
         /// Default action for all events, except for completion.
-        /// - SeeAlso: SSURLSession.TaskRegistry.Behaviour.dataCompletionHandler
-        case dataCompletionHandler(SSURLSession._TaskRegistry.DataTaskCompletion)
+        /// - SeeAlso: URLSession.TaskRegistry.Behaviour.dataCompletionHandler
+        case dataCompletionHandler(URLSession._TaskRegistry.DataTaskCompletion)
         /// Default action for all events, except for completion.
-        /// - SeeAlso: SSURLSession.TaskRegistry.Behaviour.downloadCompletionHandler
-        case downloadCompletionHandler(SSURLSession._TaskRegistry.DownloadTaskCompletion)
+        /// - SeeAlso: URLSession.TaskRegistry.Behaviour.downloadCompletionHandler
+        case downloadCompletionHandler(URLSession._TaskRegistry.DownloadTaskCompletion)
     }
 
-    func behaviour(for task: SSURLSessionTask) -> _TaskBehaviour {
+    func behaviour(for task: URLSessionTask) -> _TaskBehaviour {
         switch taskRegistry.behaviour(for: task) {
         case .dataCompletionHandler(let c): return .dataCompletionHandler(c)
         case .downloadCompletionHandler(let c): return .downloadCompletionHandler(c)
         case .callDelegate:
-            guard let d = delegate as? SSURLSessionTaskDelegate else {
+            guard let d = delegate as? URLSessionTaskDelegate else {
                 return .noDelegate
             }
             return .taskDelegate(d)
@@ -648,38 +640,38 @@ internal extension SSURLSession {
 }
 
 
-internal protocol SSURLSessionProtocol: AnyObject {
-    func add(handle: _SSEasyHandle)
-    func remove(handle: _SSEasyHandle)
-    func behaviour(for: SSURLSessionTask) -> SSURLSession._TaskBehaviour
-    var configuration: SSURLSessionConfiguration { get }
-    var delegate: SSURLSessionDelegate? { get }
+internal protocol URLSessionProtocol: AnyObject {
+    func add(handle: _EasyHandle)
+    func remove(handle: _EasyHandle)
+    func behaviour(for: URLSessionTask) -> URLSession._TaskBehaviour
+    var configuration: URLSessionConfiguration { get }
+    var delegate: URLSessionDelegate? { get }
 }
-extension SSURLSession: SSURLSessionProtocol {
-    func add(handle: _SSEasyHandle) {
+extension URLSession: URLSessionProtocol {
+    func add(handle: _EasyHandle) {
         multiHandle.add(handle)
     }
-    func remove(handle: _SSEasyHandle) {
+    func remove(handle: _EasyHandle) {
         multiHandle.remove(handle)
     }
 }
-/// This class is only used to allow `SSURLSessionTask.init()` to work.
+/// This class is only used to allow `URLSessionTask.init()` to work.
 ///
-/// - SeeAlso: SSURLSessionTask.init()
-final internal class _SSMissingURLSession: SSURLSessionProtocol {
-    var delegate: SSURLSessionDelegate? {
+/// - SeeAlso: URLSessionTask.init()
+final internal class _MissingURLSession: URLSessionProtocol {
+    var delegate: URLSessionDelegate? {
         fatalError()
     }
-    var configuration: SSURLSessionConfiguration {
+    var configuration: URLSessionConfiguration {
         fatalError()
     }
-    func add(handle: _SSEasyHandle) {
+    func add(handle: _EasyHandle) {
         fatalError()
     }
-    func remove(handle: _SSEasyHandle) {
+    func remove(handle: _EasyHandle) {
         fatalError()
     }
-    func behaviour(for: SSURLSessionTask) -> SSURLSession._TaskBehaviour {
+    func behaviour(for: URLSessionTask) -> URLSession._TaskBehaviour {
         fatalError()
     }
 }

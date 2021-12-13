@@ -1,4 +1,4 @@
-// Foundation/SSURLSession/HTTPMessage.swift - HTTP Message parsing
+// Foundation/URLSession/HTTPMessage.swift - HTTP Message parsing
 //
 // This source file is part of the Swift.org open source project
 //
@@ -11,20 +11,20 @@
 // -----------------------------------------------------------------------------
 ///
 /// Helpers for parsing HTTP responses.
-/// These are libcurl helpers for the SSURLSession API code.
+/// These are libcurl helpers for the URLSession API code.
 /// - SeeAlso: https://curl.haxx.se/libcurl/c/
-/// - SeeAlso: SSURLSession.swift
+/// - SeeAlso: URLSession.swift
 ///
 // -----------------------------------------------------------------------------
 
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
-import Foundation
+import SwiftFoundation
 #else
 import Foundation
 #endif
 @_implementationOnly import CoreFoundation
 
-internal extension _SSHTTPURLProtocol._ResponseHeaderLines {
+internal extension _HTTPURLProtocol._ResponseHeaderLines {
     /// Create an `NSHTTPRULResponse` from the lines.
     ///
     /// This will parse the header lines.
@@ -33,17 +33,17 @@ internal extension _SSHTTPURLProtocol._ResponseHeaderLines {
         guard let message = createHTTPMessage() else { return nil }
         return HTTPURLResponse(message: message, URL: URL)
     }
-    /// Parse the lines into a `_SSHTTPURLProtocol.HTTPMessage`.
-    func createHTTPMessage() -> _SSHTTPURLProtocol._HTTPMessage? {
+    /// Parse the lines into a `_HTTPURLProtocol.HTTPMessage`.
+    func createHTTPMessage() -> _HTTPURLProtocol._HTTPMessage? {
         guard let (head, tail) = lines.decompose else { return nil }
-        guard let startline = _SSHTTPURLProtocol._HTTPMessage._StartLine(line: head) else { return nil }
+        guard let startline = _HTTPURLProtocol._HTTPMessage._StartLine(line: head) else { return nil }
         guard let headers = createHeaders(from: tail) else { return nil }
-        return _SSHTTPURLProtocol._HTTPMessage(startLine: startline, headers: headers)
+        return _HTTPURLProtocol._HTTPMessage(startLine: startline, headers: headers)
     }
 }
 
 extension HTTPURLResponse {
-    fileprivate convenience init?(message: _SSHTTPURLProtocol._HTTPMessage, URL: URL) {
+    fileprivate convenience init?(message: _HTTPURLProtocol._HTTPMessage, URL: URL) {
         /// This needs to be a request, i.e. it needs to have a status line.
         guard case .statusLine(let version, let status, _) = message.startLine else { return nil }
         let fields = message.headersAsDictionary
@@ -52,7 +52,7 @@ extension HTTPURLResponse {
 }
 
 
-extension _SSHTTPURLProtocol {
+extension _HTTPURLProtocol {
     /// HTTP Message
     ///
     /// A message consist of a *start-line* optionally followed by one or multiple
@@ -62,12 +62,12 @@ extension _SSHTTPURLProtocol {
     ///
     /// - SeeAlso: https://tools.ietf.org/html/rfc2616#section-4
     struct _HTTPMessage {
-        let startLine: _SSHTTPURLProtocol._HTTPMessage._StartLine
-        let headers: [_SSHTTPURLProtocol._HTTPMessage._Header]
+        let startLine: _HTTPURLProtocol._HTTPMessage._StartLine
+        let headers: [_HTTPURLProtocol._HTTPMessage._Header]
     }
 }
 
-extension _SSHTTPURLProtocol._HTTPMessage {
+extension _HTTPURLProtocol._HTTPMessage {
     var headersAsDictionary: [String: String] {
         var result: [String: String] = [:]
         headers.forEach {
@@ -81,7 +81,7 @@ extension _SSHTTPURLProtocol._HTTPMessage {
         return result
     }
 }
-extension _SSHTTPURLProtocol._HTTPMessage {
+extension _HTTPURLProtocol._HTTPMessage {
     /// A single HTTP message header field
     ///
     /// Most HTTP messages have multiple header fields.
@@ -96,10 +96,10 @@ extension _SSHTTPURLProtocol._HTTPMessage {
     enum _StartLine {
         /// RFC 2616 Section 5.1 *Request Line*
         /// - SeeAlso: https://tools.ietf.org/html/rfc2616#section-5.1
-        case requestLine(method: String, uri: URL, version: _SSHTTPURLProtocol._HTTPMessage._Version)
+        case requestLine(method: String, uri: URL, version: _HTTPURLProtocol._HTTPMessage._Version)
         /// RFC 2616 Section 6.1 *Status Line*
         /// - SeeAlso: https://tools.ietf.org/html/rfc2616#section-6.1
-        case statusLine(version: _SSHTTPURLProtocol._HTTPMessage._Version, status: Int, reason: String)
+        case statusLine(version: _HTTPURLProtocol._HTTPMessage._Version, status: Int, reason: String)
     }
     /// A HTTP version, e.g. "HTTP/1.1"
     struct _Version: RawRepresentable {
@@ -121,18 +121,18 @@ extension _SSHTTPURLProtocol._HTTPMessage {
         let authParameters: [_AuthParameter]
     }
 }
-extension _SSHTTPURLProtocol._HTTPMessage._Version {
+extension _HTTPURLProtocol._HTTPMessage._Version {
     init?(versionString: String) {
         rawValue = versionString
     }
 }
-extension _SSHTTPURLProtocol._HTTPMessage._Challenge {
+extension _HTTPURLProtocol._HTTPMessage._Challenge {
     /// Case-insensitively searches for auth parameter with specified name
     func parameter(withName name: String) -> _AuthParameter? {
         return authParameters.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
     }
 }
-extension _SSHTTPURLProtocol._HTTPMessage._Challenge {
+extension _HTTPURLProtocol._HTTPMessage._Challenge {
     /// Creates authentication challenges from provided `HTTPURLResponse`.
     ///
     /// The value of `WWW-Authenticate` field is used for parsing authentication challenges
@@ -144,20 +144,11 @@ extension _SSHTTPURLProtocol._HTTPMessage._Challenge {
     /// # Reference
     /// - [RFC 7235 - Hypertext Transfer Protocol (HTTP/1.1): Authentication](https://tools.ietf.org/html/rfc7235)
     /// - [RFC 7617 - The 'Basic' HTTP Authentication Scheme](https://tools.ietf.org/html/rfc7617)
-    static func challenges(from response: HTTPURLResponse) -> [_SSHTTPURLProtocol._HTTPMessage._Challenge] {
-        if #available(iOS 13.0, *) {
-            guard let authenticateValue = response.value(forHTTPHeaderField: "WWW-Authenticate") else {
-                return []
-            }
-            return challenges(from: authenticateValue)
-        } else {
-            // Fallback on earlier versions
-            let allHeaders = response.allHeaderFields
-            guard let authenticateValue = allHeaders["WWW-Authenticate"] as? String else {
-                return []
-            }
-            return challenges(from: authenticateValue)
+    static func challenges(from response: HTTPURLResponse) -> [_HTTPURLProtocol._HTTPMessage._Challenge] {
+        guard let authenticateValue = response.value(forHTTPHeaderField: "WWW-Authenticate") else {
+            return []
         }
+        return challenges(from: authenticateValue)
     }
     /// Creates authentication challenges from provided field value.
     ///
@@ -170,8 +161,8 @@ extension _SSHTTPURLProtocol._HTTPMessage._Challenge {
     /// # Reference
     /// - [RFC 7235 - Hypertext Transfer Protocol (HTTP/1.1): Authentication](https://tools.ietf.org/html/rfc7235)
     /// - [RFC 7617 - The 'Basic' HTTP Authentication Scheme](https://tools.ietf.org/html/rfc7617)
-    static func challenges(from authenticateFieldValue: String) -> [_SSHTTPURLProtocol._HTTPMessage._Challenge] {
-        var challenges = [_SSHTTPURLProtocol._HTTPMessage._Challenge]()
+    static func challenges(from authenticateFieldValue: String) -> [_HTTPURLProtocol._HTTPMessage._Challenge] {
+        var challenges = [_HTTPURLProtocol._HTTPMessage._Challenge]()
         
         // Typical WWW-Authenticate header is something like
         //   WWWW-Authenticate: Digest realm="test", domain="/HTTP/Digest", nonce="e3d002b9b2080453fdacea2d89f2d102"
@@ -225,8 +216,8 @@ extension _SSHTTPURLProtocol._HTTPMessage._Challenge {
             let authScheme = String(authenticateView[authSchemeRange])
             if authScheme.caseInsensitiveCompare(AuthSchemeBasic) == .orderedSame {
                 let authDataView = authenticateView[authSchemeRange.upperBound...]
-                let authParameters = _SSHTTPURLProtocol._HTTPMessage._Challenge._AuthParameter.parameters(from: authDataView)
-                let challenge = _SSHTTPURLProtocol._HTTPMessage._Challenge(authScheme: authScheme, authParameters: authParameters)
+                let authParameters = _HTTPURLProtocol._HTTPMessage._Challenge._AuthParameter.parameters(from: authDataView)
+                let challenge = _HTTPURLProtocol._HTTPMessage._Challenge(authScheme: authScheme, authParameters: authParameters)
                 // "realm" is the only mandatory parameter for Basic auth scheme. Otherwise consider parsed data invalid.
                 if challenge.parameter(withName: "realm") != nil {
                     challenges.append(challenge)
@@ -244,11 +235,11 @@ extension _SSHTTPURLProtocol._HTTPMessage._Challenge {
         return challenges
     }
 }
-private extension _SSHTTPURLProtocol._HTTPMessage._Challenge._AuthParameter {
+private extension _HTTPURLProtocol._HTTPMessage._Challenge._AuthParameter {
     /// Reads authorization challenge parameters from provided Unicode Scalar view
-    static func parameters(from parametersView: String.UnicodeScalarView.SubSequence) -> [_SSHTTPURLProtocol._HTTPMessage._Challenge._AuthParameter] {
+    static func parameters(from parametersView: String.UnicodeScalarView.SubSequence) -> [_HTTPURLProtocol._HTTPMessage._Challenge._AuthParameter] {
         var parametersView = parametersView
-        var parameters = [_SSHTTPURLProtocol._HTTPMessage._Challenge._AuthParameter]()
+        var parameters = [_HTTPURLProtocol._HTTPMessage._Challenge._AuthParameter]()
         while true {
             parametersView = parametersView.trimSPPrefix
             guard let parameter = parameter(from: &parametersView) else {
@@ -266,7 +257,7 @@ private extension _SSHTTPURLProtocol._HTTPMessage._Challenge._AuthParameter {
         return parameters
     }
     /// Reads a single challenge parameter from provided Unicode Scalar view
-    private static func parameter(from parametersView: inout String.UnicodeScalarView.SubSequence) -> _SSHTTPURLProtocol._HTTPMessage._Challenge._AuthParameter? {
+    private static func parameter(from parametersView: inout String.UnicodeScalarView.SubSequence) -> _HTTPURLProtocol._HTTPMessage._Challenge._AuthParameter? {
         // Read parameter name. Return nil if name is not readable.
         guard let parameterName = parameterName(from: &parametersView) else {
             return nil
@@ -282,7 +273,7 @@ private extension _SSHTTPURLProtocol._HTTPMessage._Challenge._AuthParameter {
         guard let parameterValue = parameterValue(from: &parametersView) else {
             return nil
         }
-        return _SSHTTPURLProtocol._HTTPMessage._Challenge._AuthParameter(name: parameterName, value: parameterValue)
+        return _HTTPURLProtocol._HTTPMessage._Challenge._AuthParameter(name: parameterName, value: parameterValue)
     }
     /// Reads a challenge parameter name from provided Unicode Scalar view
     private static func parameterName(from nameView: inout String.UnicodeScalarView.SubSequence) -> String? {
@@ -317,14 +308,14 @@ private extension _SSHTTPURLProtocol._HTTPMessage._Challenge._AuthParameter {
         return nil
     }
 }
-private extension _SSHTTPURLProtocol._HTTPMessage._StartLine {
+private extension _HTTPURLProtocol._HTTPMessage._StartLine {
     init?(line: String) {
         guard let r = line.splitRequestLine() else { return nil }
-        if let version = _SSHTTPURLProtocol._HTTPMessage._Version(versionString: r.0) {
+        if let version = _HTTPURLProtocol._HTTPMessage._Version(versionString: r.0) {
             // Status line:
             guard let status = Int(r.1), 100 <= status && status <= 999 else { return nil }
             self = .statusLine(version: version, status: status, reason: r.2)
-        } else if let version = _SSHTTPURLProtocol._HTTPMessage._Version(versionString: r.2),
+        } else if let version = _HTTPURLProtocol._HTTPMessage._Version(versionString: r.2),
             let URI = URL(string: r.1) {
             // The request method must be a token (i.e. without separators):
             let separatorIdx = r.0.unicodeScalars.firstIndex(where: { !$0.isValidMessageToken } )
@@ -359,24 +350,24 @@ private extension String {
 }
 
 /// Parses an array of lines into an array of
-/// `SSURLSessionTask.HTTPMessage.Header`.
+/// `URLSessionTask.HTTPMessage.Header`.
 ///
 /// This respects the header folding as described by
 /// https://tools.ietf.org/html/rfc2616#section-2.2 :
 ///
-/// - SeeAlso: `_SSHTTPURLProtocol.HTTPMessage.Header.createOne(from:)`
-private func createHeaders(from lines: ArraySlice<String>) -> [_SSHTTPURLProtocol._HTTPMessage._Header]? {
+/// - SeeAlso: `_HTTPURLProtocol.HTTPMessage.Header.createOne(from:)`
+private func createHeaders(from lines: ArraySlice<String>) -> [_HTTPURLProtocol._HTTPMessage._Header]? {
 
     var headerLines = Array(lines)
-    var headers: [_SSHTTPURLProtocol._HTTPMessage._Header] = []
+    var headers: [_HTTPURLProtocol._HTTPMessage._Header] = []
     while !headerLines.isEmpty {
-        guard let (header, remaining) = _SSHTTPURLProtocol._HTTPMessage._Header.createOne(from: headerLines) else { return nil }
+        guard let (header, remaining) = _HTTPURLProtocol._HTTPMessage._Header.createOne(from: headerLines) else { return nil }
         headers.append(header)
         headerLines = remaining
     }
     return headers
 }
-private extension _SSHTTPURLProtocol._HTTPMessage._Header {
+private extension _HTTPURLProtocol._HTTPMessage._Header {
     /// Parse a single HTTP message header field
     ///
     /// Each header field consists
@@ -395,7 +386,7 @@ private extension _SSHTTPURLProtocol._HTTPMessage._Header {
     /// If an error occurs, it returns `nil`.
     ///
     /// - SeeAlso: https://tools.ietf.org/html/rfc2616#section-4.2
-    static func createOne(from lines: [String]) -> (_SSHTTPURLProtocol._HTTPMessage._Header, [String])? {
+    static func createOne(from lines: [String]) -> (_HTTPURLProtocol._HTTPMessage._Header, [String])? {
         // HTTP/1.1 header field values can be folded onto multiple lines if the
         // continuation line begins with a space or horizontal tab. All linear
         // white space, including folding, has the same semantics as SP. A
@@ -426,7 +417,7 @@ private extension _SSHTTPURLProtocol._HTTPMessage._Header {
                 let valuePart = String(v)
                 value = value.map { $0 + " " + valuePart } ?? valuePart
             }
-            return (_SSHTTPURLProtocol._HTTPMessage._Header(name: name, value: value ?? ""), Array(t))
+            return (_HTTPURLProtocol._HTTPMessage._Header(name: name, value: value ?? ""), Array(t))
         }
     }
 }

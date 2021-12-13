@@ -1,4 +1,4 @@
-// Foundation/SSURLSession/SSURLSessionTaskMetrics.swift - SSURLSession API
+// Foundation/URLSession/URLSessionTaskMetrics.swift - URLSession API
 //
 // This source file is part of the Swift.org open source project
 //
@@ -10,21 +10,21 @@
 //
 // -----------------------------------------------------------------------------
 ///
-/// SSURLSession API code.
-/// - SeeAlso: SSURLSession.swift
+/// URLSession API code.
+/// - SeeAlso: URLSession.swift
 ///
 // -----------------------------------------------------------------------------
 
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
-import Foundation
+import SwiftFoundation
 #else
 import Foundation
 #endif
 @_implementationOnly import CoreFoundation
 
-open class SSURLSessionTaskMetrics : NSObject {
-    public internal(set) var transactionMetrics: [SSURLSessionTaskTransactionMetrics] = []
-//    public internal(set) var taskInterval: DateInterval = .init()
+open class URLSessionTaskMetrics : NSObject {
+    public internal(set) var transactionMetrics: [URLSessionTaskTransactionMetrics] = []
+    public internal(set) var taskInterval: DateInterval = .init()
     public internal(set) var redirectCount = 0
 
     public enum ResourceFetchType: Int {
@@ -43,7 +43,7 @@ open class SSURLSessionTaskMetrics : NSObject {
     }
 }
 
-open class SSURLSessionTaskTransactionMetrics: NSObject {
+open class URLSessionTaskTransactionMetrics: NSObject {
     public let request: URLRequest
     public internal(set) var response: URLResponse?
 
@@ -79,8 +79,8 @@ open class SSURLSessionTaskTransactionMetrics: NSObject {
     public internal(set) var isProxyConnection: Bool = false
     public internal(set) var isReusedConnection: Bool = false
     public internal(set) var isMultipath: Bool = false
-    public internal(set) var resourceFetchType: SSURLSessionTaskMetrics.ResourceFetchType = .unknown
-    public internal(set) var domainResolutionProtocol: SSURLSessionTaskMetrics.DomainResolutionProtocol = .unknown
+    public internal(set) var resourceFetchType: URLSessionTaskMetrics.ResourceFetchType = .unknown
+    public internal(set) var domainResolutionProtocol: URLSessionTaskMetrics.DomainResolutionProtocol = .unknown
 
     init(request: URLRequest) {
         self.request = request

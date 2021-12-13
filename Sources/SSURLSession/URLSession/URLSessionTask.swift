@@ -1,4 +1,4 @@
-// Foundation/SSURLSession/SSURLSessionTask.swift - SSURLSession API
+// Foundation/URLSession/URLSessionTask.swift - URLSession API
 //
 // This source file is part of the Swift.org open source project
 //
@@ -10,13 +10,13 @@
 //
 // -----------------------------------------------------------------------------
 ///
-/// SSURLSession API code.
-/// - SeeAlso: SSURLSession.swift
+/// URLSession API code.
+/// - SeeAlso: URLSession.swift
 ///
 // -----------------------------------------------------------------------------
 
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
-import Foundation
+import SwiftFoundation
 #else
 import Foundation
 #endif
@@ -28,8 +28,7 @@ private class Bag<Element> {
 
 /// A cancelable object that refers to the lifetime
 /// of processing a given request.
-@objc
-open class SSURLSessionTask : NSObject, NSCopying {
+open class URLSessionTask : NSObject, NSCopying {
     
     // These properties aren't heeded in swift-corelibs-foundation, but we may heed them in the future. They exist for source compatibility.
     open var countOfBytesClientExpectsToReceive: Int64 = NSURLSessionTransferSizeUnknown {
@@ -40,7 +39,7 @@ open class SSURLSessionTask : NSObject, NSCopying {
     }
     
     #if NS_CURL_MISSING_XFERINFOFUNCTION
-    @available(*, deprecated, message: "This platform doesn't fully support reporting the progress of a SSURLSessionTask. The progress instance returned will be functional, but may not have continuous updates as bytes are sent or received.")
+    @available(*, deprecated, message: "This platform doesn't fully support reporting the progress of a URLSessionTask. The progress instance returned will be functional, but may not have continuous updates as bytes are sent or received.")
     open private(set) var progress = Progress(totalUnitCount: -1)
     #else
     open private(set) var progress = Progress(totalUnitCount: -1)
@@ -96,19 +95,19 @@ open class SSURLSessionTask : NSObject, NSCopying {
     }
     
     // We're not going to heed this one. If someone is setting it in Linux code, they may be relying on behavior that isn't there; warn.
-    @available(*, deprecated, message: "swift-corelibs-foundation does not support background SSURLSession instances, and this property is documented to have no effect when set on tasks created from non-background SSURLSession instances. Modifying this property has no effect in swift-corelibs-foundation and shouldn't be relied upon; resume tasks at the appropriate time instead.")
+    @available(*, deprecated, message: "swift-corelibs-foundation does not support background URLSession instances, and this property is documented to have no effect when set on tasks created from non-background URLSession instances. Modifying this property has no effect in swift-corelibs-foundation and shouldn't be relied upon; resume tasks at the appropriate time instead.")
     open var earliestBeginDate: Date? = nil
     
     /// How many times the task has been suspended, 0 indicating a running task.
     internal var suspendCount = 1
     
-    internal var actualSession: SSURLSession? { return session as? SSURLSession }
-    internal var session: SSURLSessionProtocol! //change to nil when task completes
+    internal var actualSession: URLSession? { return session as? URLSession }
+    internal var session: URLSessionProtocol! //change to nil when task completes
 
     fileprivate enum ProtocolState {
         case toBeCreated
-        case awaitingCacheReply(Bag<(SSURLProtocol?) -> Void>)
-        case existing(SSURLProtocol)
+        case awaitingCacheReply(Bag<(URLProtocol?) -> Void>)
+        case existing(URLProtocol)
         case invalidated
     }
     
@@ -116,16 +115,16 @@ open class SSURLSessionTask : NSObject, NSCopying {
     fileprivate var _protocolStorage: ProtocolState = .toBeCreated
     internal    var _lastCredentialUsedFromStorageDuringAuthentication: (protectionSpace: URLProtectionSpace, credential: URLCredential)?
     
-    private var _protocolClass: SSURLProtocol.Type {
+    private var _protocolClass: URLProtocol.Type {
         guard let request = currentRequest else { fatalError("A protocol class was requested, but we do not have a current request") }
         let protocolClasses = session.configuration.protocolClasses ?? []
-        if let urlProtocolClass = SSURLProtocol.getProtocolClass(protocols: protocolClasses, request: request) {
-            guard let urlProtocol = urlProtocolClass as? SSURLProtocol.Type else { fatalError("A protocol class specified in the SSURLSessionConfiguration's .protocolClasses array was not a SSURLProtocol subclass: \(urlProtocolClass)") }
+        if let urlProtocolClass = URLProtocol.getProtocolClass(protocols: protocolClasses, request: request) {
+            guard let urlProtocol = urlProtocolClass as? URLProtocol.Type else { fatalError("A protocol class specified in the URLSessionConfiguration's .protocolClasses array was not a URLProtocol subclass: \(urlProtocolClass)") }
             return urlProtocol
         } else {
-            let protocolClasses = SSURLProtocol.getProtocols() ?? []
-            if let urlProtocolClass = SSURLProtocol.getProtocolClass(protocols: protocolClasses, request: request) {
-                guard let urlProtocol = urlProtocolClass as? SSURLProtocol.Type else { fatalError("A protocol class registered with SSURLProtocol.register… was not a SSURLProtocol subclass: \(urlProtocolClass)") }
+            let protocolClasses = URLProtocol.getProtocols() ?? []
+            if let urlProtocolClass = URLProtocol.getProtocolClass(protocols: protocolClasses, request: request) {
+                guard let urlProtocol = urlProtocolClass as? URLProtocol.Type else { fatalError("A protocol class registered with URLProtocol.register… was not a URLProtocol subclass: \(urlProtocolClass)") }
                 return urlProtocol
             }
         }
@@ -133,13 +132,13 @@ open class SSURLSessionTask : NSObject, NSCopying {
         fatalError("Couldn't find a protocol appropriate for request: \(request)")
     }
     
-    func _getProtocol(_ callback: @escaping (SSURLProtocol?) -> Void) {
+    func _getProtocol(_ callback: @escaping (URLProtocol?) -> Void) {
         _protocolLock.lock() // Must be balanced below, before we call out ⬇
         
         switch _protocolStorage {
         case .toBeCreated:
-            if let cache = session.configuration.urlCache, let me = self as? SSURLSessionDataTask {
-                let bag: Bag<(SSURLProtocol?) -> Void> = Bag()
+            if let cache = session.configuration.urlCache, let me = self as? URLSessionDataTask {
+                let bag: Bag<(URLProtocol?) -> Void> = Bag()
                 bag.values.append(callback)
                 
                 _protocolStorage = .awaitingCacheReply(bag)
@@ -173,7 +172,7 @@ open class SSURLSessionTask : NSObject, NSCopying {
         }
     }
     
-    func _satisfyProtocolRequest(with urlProtocol: SSURLProtocol) {
+    func _satisfyProtocolRequest(with urlProtocol: URLProtocol) {
         _protocolLock.lock() // Must be balanced below, before we call out ⬇
         switch _protocolStorage {
         case .toBeCreated:
@@ -208,7 +207,7 @@ open class SSURLSessionTask : NSObject, NSCopying {
             return
         }
         
-        if let session = actualSession, let delegate = session.delegate as? SSURLSessionTaskDelegate {
+        if let session = actualSession, let delegate = session.delegate as? URLSessionTaskDelegate {
             delegate.urlSession(session, task: self) { (stream) in
                 if let stream = stream {
                     completion(.stream(stream))
@@ -221,7 +220,7 @@ open class SSURLSessionTask : NSObject, NSCopying {
         }
     }
     
-    private let syncQ = DispatchQueue(label: "org.swift.SSURLSessionTask.SyncQ")
+    private let syncQ = DispatchQueue(label: "org.swift.URLSessionTask.SyncQ")
     private var hasTriggeredResume: Bool = false
     internal var isSuspendedAfterResume: Bool {
         return self.syncQ.sync { return self.hasTriggeredResume } && self.state == .suspended
@@ -237,15 +236,15 @@ open class SSURLSessionTask : NSObject, NSCopying {
         //
         // We set up the bare minimum for init to work, but don't care too much
         // about things crashing later.
-        session = _SSMissingURLSession()
+        session = _MissingURLSession()
         taskIdentifier = 0
         originalRequest = nil
-        knownBody = SSURLSessionTask._Body.none
-        workQueue = DispatchQueue(label: "SSURLSessionTask.notused.0")
+        knownBody = URLSessionTask._Body.none
+        workQueue = DispatchQueue(label: "URLSessionTask.notused.0")
         super.init()
     }
     /// Create a data task. If there is a httpBody in the URLRequest, use that as a parameter
-    internal convenience init(session: SSURLSession, request: URLRequest, taskIdentifier: Int) {
+    internal convenience init(session: URLSession, request: URLRequest, taskIdentifier: Int) {
         if let bodyData = request.httpBody, !bodyData.isEmpty {
             self.init(session: session, request: request, taskIdentifier: taskIdentifier, body: _Body.data(createDispatchData(bodyData)))
         } else if let bodyStream = request.httpBodyStream {
@@ -255,10 +254,10 @@ open class SSURLSessionTask : NSObject, NSCopying {
         }
     }
 
-    internal init(session: SSURLSession, request: URLRequest, taskIdentifier: Int, body: _Body?) {
+    internal init(session: URLSession, request: URLRequest, taskIdentifier: Int, body: _Body?) {
         self.session = session
         /* make sure we're actually having a serial queue as it's used for synchronization */
-        self.workQueue = DispatchQueue.init(label: "org.swift.SSURLSessionTask.WorkQueue", target: session.workQueue)
+        self.workQueue = DispatchQueue.init(label: "org.swift.URLSessionTask.WorkQueue", target: session.workQueue)
         self.taskIdentifier = taskIdentifier
         self.originalRequest = request
         self.knownBody = body
@@ -358,7 +357,7 @@ open class SSURLSessionTask : NSObject, NSCopying {
     open var taskDescription: String?
     
     /* -cancel returns immediately, but marks a task as being canceled.
-     * The task will signal -SSURLSession:task:didCompleteWithError: with an
+     * The task will signal -URLSession:task:didCompleteWithError: with an
      * error value of { NSURLErrorDomain, NSURLErrorCancelled }.  In some
      * cases, the task may signal other work before it acknowledges the
      * cancellation.  -cancel may be sent to a task that has been suspended.
@@ -392,7 +391,7 @@ open class SSURLSessionTask : NSObject, NSCopying {
     /*
      * The current state of the task within the session.
      */
-    open fileprivate(set) var state: SSURLSessionTask.State {
+    open fileprivate(set) var state: URLSessionTask.State {
         get {
             return self.syncQ.sync { self._state }
         }
@@ -400,17 +399,17 @@ open class SSURLSessionTask : NSObject, NSCopying {
             self.syncQ.sync { self._state = newValue }
         }
     }
-    fileprivate var _state: SSURLSessionTask.State = .suspended
+    fileprivate var _state: URLSessionTask.State = .suspended
     
     /*
-     * The error, if any, delivered via -SSURLSession:task:didCompleteWithError:
+     * The error, if any, delivered via -URLSession:task:didCompleteWithError:
      * This property will be nil in the event that no error occurred.
      */
     /*@NSCopying*/ open internal(set) var error: Error?
     
     /// Suspend the task.
     ///
-    /// Suspending a task will prevent the SSURLSession from continuing to
+    /// Suspending a task will prevent the URLSession from continuing to
     /// load data.  There may still be delegate calls made on behalf of
     /// this task (for instance, to report data received while suspending)
     /// but no further transmissions will be made on behalf of the task
@@ -451,7 +450,6 @@ open class SSURLSessionTask : NSObject, NSCopying {
     /// Resume the task.
     ///
     /// - SeeAlso: `suspend()`
-    @objc
     open func resume() {
         workQueue.sync {
             guard self.state != .canceling && self.state != .completed else { return }
@@ -474,7 +472,7 @@ open class SSURLSessionTask : NSObject, NSCopying {
                                                                       code: NSURLErrorUnsupportedURL,
                                                                       userInfo: userInfo))
                             self.error = urlError
-                            _SSProtocolClient().urlProtocol(task: self, didFailWithError: urlError)
+                            _ProtocolClient().urlProtocol(task: self, didFailWithError: urlError)
                         }
                     }
                 }
@@ -494,9 +492,9 @@ open class SSURLSessionTask : NSObject, NSCopying {
     /// will be used.
     ///
     /// If no priority is specified, the task will operate with the default priority
-    /// as defined by the constant SSURLSessionTask.defaultPriority. Two additional
-    /// priority levels are provided: SSURLSessionTask.lowPriority and
-    /// SSURLSessionTask.highPriority, but use is not restricted to these.
+    /// as defined by the constant URLSessionTask.defaultPriority. Two additional
+    /// priority levels are provided: URLSessionTask.lowPriority and
+    /// URLSessionTask.highPriority, but use is not restricted to these.
     open var priority: Float {
         get {
             return self.workQueue.sync { return self._priority }
@@ -505,29 +503,29 @@ open class SSURLSessionTask : NSObject, NSCopying {
             self.workQueue.sync { self._priority = newValue }
         }
     }
-    fileprivate var _priority: Float = SSURLSessionTask.defaultPriority
+    fileprivate var _priority: Float = URLSessionTask.defaultPriority
 }
 
-extension SSURLSessionTask {
+extension URLSessionTask {
     public enum State : Int {
         /// The task is currently being serviced by the session
         case running
         case suspended
-        /// The task has been told to cancel.  The session will receive a SSURLSession:task:didCompleteWithError: message.
+        /// The task has been told to cancel.  The session will receive a URLSession:task:didCompleteWithError: message.
         case canceling
         /// The task has completed and the session will receive no more delegate notifications
         case completed
     }
 }
 
-extension SSURLSessionTask : ProgressReporting {}
+extension URLSessionTask : ProgressReporting {}
 
-extension SSURLSessionTask {
+extension URLSessionTask {
     /// Updates the (public) state based on private / internal state.
     ///
     /// - Note: This must be called on the `workQueue`.
     internal func updateTaskState() {
-        func calculateState() -> SSURLSessionTask.State {
+        func calculateState() -> URLSessionTask.State {
             if suspendCount == 0 {
                 return .running
             } else {
@@ -538,7 +536,7 @@ extension SSURLSessionTask {
     }
 }
 
-internal extension SSURLSessionTask {
+internal extension URLSessionTask {
     enum _Body {
         case none
         case data(DispatchData)
@@ -547,7 +545,7 @@ internal extension SSURLSessionTask {
         case stream(InputStream)
     }
 }
-internal extension SSURLSessionTask._Body {
+internal extension URLSessionTask._Body {
     enum _Error : Error {
         case fileForBodyDataNotFound
     }
@@ -590,7 +588,7 @@ fileprivate func errorCode(fileSystemError error: Error) -> Int {
     }
 }
 
-extension SSURLSessionTask {
+extension URLSessionTask {
     /// The default URL session task priority, used implicitly for any task you
     /// have not prioritized. The floating point value of this constant is 0.5.
     public static let defaultPriority: Float = 0.5
@@ -605,32 +603,32 @@ extension SSURLSessionTask {
 }
 
 /*
- * An SSURLSessionDataTask does not provide any additional
- * functionality over an SSURLSessionTask and its presence is merely
+ * An URLSessionDataTask does not provide any additional
+ * functionality over an URLSessionTask and its presence is merely
  * to provide lexical differentiation from download and upload tasks.
  */
-open class SSURLSessionDataTask : SSURLSessionTask {
+open class URLSessionDataTask : URLSessionTask {
 }
 
 /*
- * An SSURLSessionUploadTask does not currently provide any additional
- * functionality over an SSURLSessionDataTask.  All delegate messages
- * that may be sent referencing an SSURLSessionDataTask equally apply
+ * An URLSessionUploadTask does not currently provide any additional
+ * functionality over an URLSessionDataTask.  All delegate messages
+ * that may be sent referencing an URLSessionDataTask equally apply
  * to URLSessionUploadTasks.
  */
-open class SSURLSessionUploadTask : SSURLSessionDataTask {
+open class URLSessionUploadTask : URLSessionDataTask {
 }
 
 /*
  * URLSessionDownloadTask is a task that represents a download to
  * local storage.
  */
-open class URLSessionDownloadTask : SSURLSessionTask {
+open class URLSessionDownloadTask : URLSessionTask {
     
     var createdFromInvalidResumeData = false
     
     // If a task is created from invalid resume data, prevent attempting creation of the protocol object.
-    override func _getProtocol(_ callback: @escaping (SSURLProtocol?) -> Void) {
+    override func _getProtocol(_ callback: @escaping (URLProtocol?) -> Void) {
         if createdFromInvalidResumeData {
             callback(nil)
         } else {
@@ -661,16 +659,99 @@ open class URLSessionDownloadTask : SSURLSessionTask {
     }
 }
 
+/*
+ * An URLSessionStreamTask provides an interface to perform reads
+ * and writes to a TCP/IP stream created via URLSession.  This task
+ * may be explicitly created from an URLSession, or created as a
+ * result of the appropriate disposition response to a
+ * -URLSession:dataTask:didReceiveResponse: delegate message.
+ *
+ * URLSessionStreamTask can be used to perform asynchronous reads
+ * and writes.  Reads and writes are enquened and executed serially,
+ * with the completion handler being invoked on the sessions delegate
+ * queuee.  If an error occurs, or the task is canceled, all
+ * outstanding read and write calls will have their completion
+ * handlers invoked with an appropriate error.
+ *
+ * It is also possible to create InputStream and OutputStream
+ * instances from an URLSessionTask by sending
+ * -captureStreams to the task.  All outstanding read and writess are
+ * completed before the streams are created.  Once the streams are
+ * delivered to the session delegate, the task is considered complete
+ * and will receive no more messages.  These streams are
+ * disassociated from the underlying session.
+ */
+
+@available(*, deprecated, message: "URLSessionStreamTask is not available in swift-corelibs-foundation")
+open class URLSessionStreamTask : URLSessionTask {
+    
+    /* Read minBytes, or at most maxBytes bytes and invoke the completion
+     * handler on the sessions delegate queue with the data or an error.
+     * If an error occurs, any outstanding reads will also fail, and new
+     * read requests will error out immediately.
+     */
+    @available(*, unavailable, message: "URLSessionStreamTask is not available in swift-corelibs-foundation")
+    open func readData(ofMinLength minBytes: Int, maxLength maxBytes: Int, timeout: TimeInterval, completionHandler: @escaping (Data?, Bool, Error?) -> Void) { NSUnsupported() }
+    
+    /* Write the data completely to the underlying socket.  If all the
+     * bytes have not been written by the timeout, a timeout error will
+     * occur.  Note that invocation of the completion handler does not
+     * guarantee that the remote side has received all the bytes, only
+     * that they have been written to the kernel. */
+    @available(*, unavailable, message: "URLSessionStreamTask is not available in swift-corelibs-foundation")
+    open func write(_ data: Data, timeout: TimeInterval, completionHandler: @escaping (Error?) -> Void) { NSUnsupported() }
+    
+    /* -captureStreams completes any already enqueued reads
+     * and writes, and then invokes the
+     * URLSession:streamTask:didBecomeInputStream:outputStream: delegate
+     * message. When that message is received, the task object is
+     * considered completed and will not receive any more delegate
+     * messages. */
+    @available(*, unavailable, message: "URLSessionStreamTask is not available in swift-corelibs-foundation")
+    open func captureStreams() { NSUnsupported() }
+    
+    /* Enqueue a request to close the write end of the underlying socket.
+     * All outstanding IO will complete before the write side of the
+     * socket is closed.  The server, however, may continue to write bytes
+     * back to the client, so best practice is to continue reading from
+     * the server until you receive EOF.
+     */
+    @available(*, unavailable, message: "URLSessionStreamTask is not available in swift-corelibs-foundation")
+    open func closeWrite() { NSUnsupported() }
+    
+    /* Enqueue a request to close the read side of the underlying socket.
+     * All outstanding IO will complete before the read side is closed.
+     * You may continue writing to the server.
+     */
+    @available(*, unavailable, message: "URLSessionStreamTask is not available in swift-corelibs-foundation")
+    open func closeRead() { NSUnsupported() }
+    
+    /*
+     * Begin encrypted handshake.  The handshake begins after all pending
+     * IO has completed.  TLS authentication callbacks are sent to the
+     * session's -URLSession:task:didReceiveChallenge:completionHandler:
+     */
+    @available(*, unavailable, message: "URLSessionStreamTask is not available in swift-corelibs-foundation")
+    open func startSecureConnection() { NSUnsupported() }
+    
+    /*
+     * Cleanly close a secure connection after all pending secure IO has
+     * completed.
+     */
+    @available(*, unavailable, message: "URLSessionStreamTask is not available in swift-corelibs-foundation")
+    open func stopSecureConnection() { NSUnsupported() }
+}
+
 /* Key in the userInfo dictionary of an NSError received during a failed download. */
 public let URLSessionDownloadTaskResumeData: String = "NSURLSessionDownloadTaskResumeData"
 
-extension _SSProtocolClient : SSURLProtocolClient {
+extension _ProtocolClient : URLProtocolClient {
 
-    func urlProtocol(_ protocol: SSURLProtocol, didReceive response: URLResponse, cacheStoragePolicy policy: SSURLCache.StoragePolicy) {
+    func urlProtocol(_ protocol: URLProtocol, didReceive response: URLResponse, cacheStoragePolicy policy: URLCache.StoragePolicy) {
         guard let task = `protocol`.task else { fatalError("Received response, but there's no task.") }
         task.response = response
-        let session = task.session as! SSURLSession
-        guard let dataTask = task as? SSURLSessionDataTask else { return }
+        let session = task.session as! URLSession
+        guard let dataTask = task as? URLSessionDataTask else { return }
         
         // Only cache data tasks:
         self.cachePolicy = policy
@@ -688,10 +769,10 @@ extension _SSProtocolClient : SSURLProtocolClient {
         }
         
         switch session.behaviour(for: task) {
-        case .taskDelegate(let delegate as SSURLSessionDataDelegate):
+        case .taskDelegate(let delegate as URLSessionDataDelegate):
             session.delegateQueue.addOperation {
                 delegate.urlSession(session, dataTask: dataTask, didReceive: response, completionHandler: { _ in
-                    SSURLSession.printDebug("warning: Ignoring disposition from completion handler.")
+                    URLSession.printDebug("warning: Ignoring disposition from completion handler.")
                 })
             }
         case .noDelegate, .taskDelegate, .dataCompletionHandler, .downloadCompletionHandler:
@@ -699,9 +780,9 @@ extension _SSProtocolClient : SSURLProtocolClient {
         }
     }
 
-    func urlProtocolDidFinishLoading(_ urlProtocol: SSURLProtocol) {
+    func urlProtocolDidFinishLoading(_ urlProtocol: URLProtocol) {
         guard let task = urlProtocol.task else { fatalError() }
-        guard let session = task.session as? SSURLSession else { fatalError() }
+        guard let session = task.session as? URLSession else { fatalError() }
         let urlResponse = task.response
         if let response = urlResponse as? HTTPURLResponse, response.statusCode == 401 {
             if let protectionSpace = URLProtectionSpace.create(with: response) {
@@ -750,13 +831,13 @@ extension _SSProtocolClient : SSURLProtocolClient {
         if let cache = session.configuration.urlCache,
            let data = cacheableData,
            let response = cacheableResponse,
-           let task = task as? SSURLSessionDataTask {
+           let task = task as? URLSessionDataTask {
             
-            let cacheable = SSCachedURLResponse(response: response, data: Data(data.joined()), storagePolicy: cachePolicy)
-            let protocolAllows = (urlProtocol as? _SSNativeProtocol)?.canCache(cacheable) ?? false
+            let cacheable = CachedURLResponse(response: response, data: Data(data.joined()), storagePolicy: cachePolicy)
+            let protocolAllows = (urlProtocol as? _NativeProtocol)?.canCache(cacheable) ?? false
             if protocolAllows {
-                if let delegate = task.session.delegate as? SSURLSessionDataDelegate {
-                    delegate.urlSession(task.session as! SSURLSession, dataTask: task, willCacheResponse: cacheable) { (actualCacheable) in
+                if let delegate = task.session.delegate as? URLSessionDataDelegate {
+                    delegate.urlSession(task.session as! URLSession, dataTask: task, willCacheResponse: cacheable) { (actualCacheable) in
                         if let actualCacheable = actualCacheable {
                             cache.storeCachedResponse(actualCacheable, for: task)
                         }
@@ -769,9 +850,9 @@ extension _SSProtocolClient : SSURLProtocolClient {
         
         switch session.behaviour(for: task) {
         case .taskDelegate(let delegate):
-            if let downloadDelegate = delegate as? SSURLSessionDownloadDelegate, let downloadTask = task as? URLSessionDownloadTask {
+            if let downloadDelegate = delegate as? URLSessionDownloadDelegate, let downloadTask = task as? URLSessionDownloadTask {
                 session.delegateQueue.addOperation {
-                    downloadDelegate.urlSession(session, downloadTask: downloadTask, didFinishDownloadingTo: urlProtocol.properties[SSURLProtocol._PropertyKey.temporaryFileURL] as! URL)
+                    downloadDelegate.urlSession(session, downloadTask: downloadTask, didFinishDownloadingTo: urlProtocol.properties[URLProtocol._PropertyKey.temporaryFileURL] as! URL)
                 }
             }
             session.delegateQueue.addOperation {
@@ -791,7 +872,7 @@ extension _SSProtocolClient : SSURLProtocolClient {
         case .dataCompletionHandler(let completion):
             session.delegateQueue.addOperation {
                 guard task.state != .completed else { return }
-                completion(urlProtocol.properties[SSURLProtocol._PropertyKey.responseData] as? Data ?? Data(), task.response, nil)
+                completion(urlProtocol.properties[URLProtocol._PropertyKey.responseData] as? Data ?? Data(), task.response, nil)
                 task.state = .completed
                 session.workQueue.async {
                     session.taskRegistry.remove(task)
@@ -800,7 +881,7 @@ extension _SSProtocolClient : SSURLProtocolClient {
         case .downloadCompletionHandler(let completion):
             session.delegateQueue.addOperation {
                 guard task.state != .completed else { return }
-                completion(urlProtocol.properties[SSURLProtocol._PropertyKey.temporaryFileURL] as? URL, task.response, nil)
+                completion(urlProtocol.properties[URLProtocol._PropertyKey.temporaryFileURL] as? URL, task.response, nil)
                 task.state = .completed
                 session.workQueue.async {
                     session.taskRegistry.remove(task)
@@ -810,15 +891,15 @@ extension _SSProtocolClient : SSURLProtocolClient {
         task._invalidateProtocol()
     }
 
-    func urlProtocol(_ protocol: SSURLProtocol, didCancel challenge: URLAuthenticationChallenge) {
+    func urlProtocol(_ protocol: URLProtocol, didCancel challenge: URLAuthenticationChallenge) {
         guard let task = `protocol`.task else { fatalError() }
         // Fail with a cancellation error, for now.
         urlProtocol(task: task, didFailWithError: NSError(domain: NSCocoaErrorDomain, code: CocoaError.userCancelled.rawValue))
     }
 
-    func urlProtocol(_ protocol: SSURLProtocol, didReceive challenge: URLAuthenticationChallenge) {
+    func urlProtocol(_ protocol: URLProtocol, didReceive challenge: URLAuthenticationChallenge) {
         guard let task = `protocol`.task else { fatalError("Received response, but there's no task.") }
-        guard let session = task.session as? SSURLSession else { fatalError("Task not associated with SSURLSession.") }
+        guard let session = task.session as? URLSession else { fatalError("Task not associated with URLSession.") }
         
         func proceed(using credential: URLCredential?) {
             let protectionSpace = challenge.protectionSpace
@@ -826,7 +907,7 @@ extension _SSProtocolClient : SSURLProtocolClient {
 
             task.suspend()
             
-            guard let handler = SSURLSessionTask.authHandler(for: authScheme) else {
+            guard let handler = URLSessionTask.authHandler(for: authScheme) else {
                 fatalError("\(authScheme) is not supported")
             }
             handler(task, .useCredential, credential)
@@ -837,7 +918,7 @@ extension _SSProtocolClient : SSURLProtocolClient {
                 } else {
                     task._lastCredentialUsedFromStorageDuringAuthentication = nil
                 }
-                task._protocolStorage = .existing(_SSHTTPURLProtocol(task: task, cachedResponse: nil, client: nil))
+                task._protocolStorage = .existing(_HTTPURLProtocol(task: task, cachedResponse: nil, client: nil))
             }
             
             task.resume()
@@ -855,7 +936,7 @@ extension _SSProtocolClient : SSURLProtocolClient {
             }
         }
         
-        if let delegate = session.delegate as? SSURLSessionTaskDelegate {
+        if let delegate = session.delegate as? URLSessionTaskDelegate {
             session.delegateQueue.addOperation {
                 delegate.urlSession(session, task: task, didReceive: challenge) { disposition, credential in
                     
@@ -880,10 +961,10 @@ extension _SSProtocolClient : SSURLProtocolClient {
         }
     }
 
-    func urlProtocol(_ protocol: SSURLProtocol, didLoad data: Data) {
+    func urlProtocol(_ protocol: URLProtocol, didLoad data: Data) {
         `protocol`.properties[.responseData] = data
         guard let task = `protocol`.task else { fatalError() }
-        guard let session = task.session as? SSURLSession else { fatalError() }
+        guard let session = task.session as? URLSession else { fatalError() }
         
         switch cachePolicy {
         case .allowed: fallthrough
@@ -896,8 +977,8 @@ extension _SSProtocolClient : SSURLProtocolClient {
         
         switch session.behaviour(for: task) {
         case .taskDelegate(let delegate):
-            let dataDelegate = delegate as? SSURLSessionDataDelegate
-            let dataTask = task as? SSURLSessionDataTask
+            let dataDelegate = delegate as? URLSessionDataDelegate
+            let dataTask = task as? URLSessionDataTask
             session.delegateQueue.addOperation {
                 dataDelegate?.urlSession(session, dataTask: dataTask!, didReceive: data)
             }
@@ -905,13 +986,13 @@ extension _SSProtocolClient : SSURLProtocolClient {
         }
     }
 
-    func urlProtocol(_ protocol: SSURLProtocol, didFailWithError error: Error) {
+    func urlProtocol(_ protocol: URLProtocol, didFailWithError error: Error) {
         guard let task = `protocol`.task else { fatalError() }
         urlProtocol(task: task, didFailWithError: error)
     }
 
-    func urlProtocol(task: SSURLSessionTask, didFailWithError error: Error) {
-        guard let session = task.session as? SSURLSession else { fatalError() }
+    func urlProtocol(task: URLSessionTask, didFailWithError error: Error) {
+        guard let session = task.session as? URLSession else { fatalError() }
         switch session.behaviour(for: task) {
         case .taskDelegate(let delegate):
             session.delegateQueue.addOperation {
@@ -950,14 +1031,14 @@ extension _SSProtocolClient : SSURLProtocolClient {
         task._invalidateProtocol()
     }
 
-    func urlProtocol(_ protocol: SSURLProtocol, cachedResponseIsValid cachedResponse: SSCachedURLResponse) {}
+    func urlProtocol(_ protocol: URLProtocol, cachedResponseIsValid cachedResponse: CachedURLResponse) {}
 
-    func urlProtocol(_ protocol: SSURLProtocol, wasRedirectedTo request: URLRequest, redirectResponse: URLResponse) {
-        fatalError("The SSURLSession swift-corelibs-foundation implementation doesn't currently handle redirects directly.")
+    func urlProtocol(_ protocol: URLProtocol, wasRedirectedTo request: URLRequest, redirectResponse: URLResponse) {
+        fatalError("The URLSession swift-corelibs-foundation implementation doesn't currently handle redirects directly.")
     }
 }
-extension SSURLSessionTask {
-    typealias _AuthHandler = ((SSURLSessionTask, SSURLSession.AuthChallengeDisposition, URLCredential?) -> ())
+extension URLSessionTask {
+    typealias _AuthHandler = ((URLSessionTask, URLSession.AuthChallengeDisposition, URLCredential?) -> ())
 
     static func authHandler(for authScheme: String) -> _AuthHandler? {
         let handlers: [String : _AuthHandler] = [
@@ -968,7 +1049,7 @@ extension SSURLSessionTask {
     }
 
     //Authentication handlers
-    static func basicAuth(_ task: SSURLSessionTask, _ disposition: SSURLSession.AuthChallengeDisposition, _ credential: URLCredential?) {
+    static func basicAuth(_ task: URLSessionTask, _ disposition: URLSession.AuthChallengeDisposition, _ credential: URLCredential?) {
         //TODO: Handle disposition. For now, we default to .useCredential
         let user = credential?.user ?? ""
         let password = credential?.password ?? ""
@@ -977,89 +1058,14 @@ extension SSURLSessionTask {
         task.authRequest?.setValue("Basic \(encodedString!)", forHTTPHeaderField: "Authorization")
     }
 
-    static func digestAuth(_ task: SSURLSessionTask, _ disposition: SSURLSession.AuthChallengeDisposition, _ credential: URLCredential?) {
-        fatalError("The SSURLSession swift-corelibs-foundation implementation doesn't currently handle digest authentication.")
+    static func digestAuth(_ task: URLSessionTask, _ disposition: URLSession.AuthChallengeDisposition, _ credential: URLCredential?) {
+        fatalError("The URLSession swift-corelibs-foundation implementation doesn't currently handle digest authentication.")
     }
 }
 
-extension SSURLProtocol {
+extension URLProtocol {
     enum _PropertyKey: String {
         case responseData
         case temporaryFileURL
-    }
-}
-
-extension URLProtectionSpace {
-    //an internal helper to create a URLProtectionSpace from a HTTPURLResponse
-    static func create(with response: HTTPURLResponse) -> URLProtectionSpace? {
-        // Using first challenge, as we don't support multiple challenges yet
-        guard let challenge = _SSHTTPURLProtocol._HTTPMessage._Challenge.challenges(from: response).first else {
-            return nil
-        }
-        guard let url = response.url, let host = url.host, let proto = url.scheme, proto == "http" || proto == "https" else {
-            return nil
-        }
-        let port = url.port ?? (proto == "http" ? 80 : 443)
-        return URLProtectionSpace(host: host,
-                                  port: port,
-                                  protocol: proto,
-                                  realm: challenge.parameter(withName: "realm")?.value,
-                                  authenticationMethod: challenge.authenticationMethod)
-    }
-}
-
-extension _SSHTTPURLProtocol._HTTPMessage._Challenge {
-    var authenticationMethod: String? {
-        if authScheme.caseInsensitiveCompare(_SSHTTPURLProtocol._HTTPMessage._Challenge.AuthSchemeBasic) == .orderedSame {
-            return NSURLAuthenticationMethodHTTPBasic
-        } else if authScheme.caseInsensitiveCompare(_SSHTTPURLProtocol._HTTPMessage._Challenge.AuthSchemeDigest) == .orderedSame {
-            return NSURLAuthenticationMethodHTTPDigest
-        } else {
-            return nil
-        }
-    }
-}
-
-class URLSessionAuthenticationChallengeSender : NSObject, URLAuthenticationChallengeSender {
-    func cancel(_ challenge: URLAuthenticationChallenge) {
-        fatalError("swift-corelibs-foundation only supports SSURLSession; for challenges coming from SSURLSession, please implement the appropriate SSURLSessionTaskDelegate methods rather than using the sender argument.")
-    }
-    
-    func continueWithoutCredential(for challenge: URLAuthenticationChallenge) {
-        fatalError("swift-corelibs-foundation only supports SSURLSession; for challenges coming from SSURLSession, please implement the appropriate SSURLSessionTaskDelegate methods rather than using the sender argument.")
-    }
-    
-    func use(_ credential: URLCredential, for challenge: URLAuthenticationChallenge) {
-        fatalError("swift-corelibs-foundation only supports SSURLSession; for challenges coming from SSURLSession, please implement the appropriate SSURLSessionTaskDelegate methods rather than using the sender argument.")
-    }
-    
-    func performDefaultHandling(for challenge: URLAuthenticationChallenge) {
-        fatalError("swift-corelibs-foundation only supports SSURLSession; for challenges coming from SSURLSession, please implement the appropriate SSURLSessionTaskDelegate methods rather than using the sender argument.")
-    }
-    
-    func rejectProtectionSpaceAndContinue(with challenge: URLAuthenticationChallenge) {
-        fatalError("swift-corelibs-foundation only supports SSURLSession; for challenges coming from SSURLSession, please implement the appropriate SSURLSessionTaskDelegate methods rather than using the sender argument.")
-    }
-}
-
-extension URLCredentialStorage {
-    public func getCredentials(for protectionSpace: URLProtectionSpace, task: SSURLSessionTask, completionHandler: ([String : URLCredential]?) -> Void) {
-        completionHandler(credentials(for: protectionSpace))
-    }
-    
-    public func set(_ credential: URLCredential, for protectionSpace: URLProtectionSpace, task: SSURLSessionTask) {
-        set(credential, for: protectionSpace)
-    }
-    
-    public func remove(_ credential: URLCredential, for protectionSpace: URLProtectionSpace, options: [String : AnyObject]? = [:], task: SSURLSessionTask) {
-        remove(credential, for: protectionSpace, options: options)
-    }
-    
-    public func getDefaultCredential(for space: URLProtectionSpace, task: SSURLSessionTask, completionHandler: (URLCredential?) -> Void) {
-        completionHandler(defaultCredential(for: space))
-    }
-    
-    public func setDefaultCredential(_ credential: URLCredential, for protectionSpace: URLProtectionSpace, task: SSURLSessionTask) {
-        setDefaultCredential(credential, for: protectionSpace)
     }
 }

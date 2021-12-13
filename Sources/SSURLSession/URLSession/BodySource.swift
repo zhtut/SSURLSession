@@ -1,4 +1,4 @@
-// Foundation/SSURLSession/BodySource.swift - SSURLSession & libcurl
+// Foundation/URLSession/BodySource.swift - URLSession & libcurl
 //
 // This source file is part of the Swift.org open source project
 //
@@ -10,14 +10,14 @@
 //
 // -----------------------------------------------------------------------------
 ///
-/// These are libcurl helpers for the SSURLSession API code.
+/// These are libcurl helpers for the URLSession API code.
 /// - SeeAlso: https://curl.haxx.se/libcurl/c/
-/// - SeeAlso: SSURLSession.swift
+/// - SeeAlso: URLSession.swift
 ///
 // -----------------------------------------------------------------------------
 
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
-import Foundation
+import SwiftFoundation
 #else
 import Foundation
 #endif
@@ -45,15 +45,15 @@ internal func splitData(dispatchData data: DispatchData, atPosition position: In
 }
 
 /// A (non-blocking) source for body data.
-internal protocol _SSBodySource: AnyObject {
+internal protocol _BodySource: AnyObject {
     /// Get the next chunck of data.
     ///
     /// - Returns: `.data` until the source is exhausted, at which point it will
     /// return `.done`. Since this is non-blocking, it will return `.retryLater`
     /// if no data is available at this point, but will be available later.
-    func getNextChunk(withLength length: Int) -> _SSBodySourceDataChunk
+    func getNextChunk(withLength length: Int) -> _BodySourceDataChunk
 }
-internal enum _SSBodySourceDataChunk {
+internal enum _BodySourceDataChunk {
     case data(DispatchData)
     /// The source is depleted.
     case done
@@ -62,7 +62,7 @@ internal enum _SSBodySourceDataChunk {
     case error
 }
 
-internal final class _SSBodyStreamSource {
+internal final class _BodyStreamSource {
     let inputStream: InputStream
     
     init(inputStream: InputStream) {
@@ -72,8 +72,8 @@ internal final class _SSBodyStreamSource {
     }
 }
 
-extension _SSBodyStreamSource : _SSBodySource {
-    func getNextChunk(withLength length: Int) -> _SSBodySourceDataChunk {
+extension _BodyStreamSource : _BodySource {
+    func getNextChunk(withLength length: Int) -> _BodySourceDataChunk {
         guard inputStream.hasBytesAvailable else {
             return .done
         }
@@ -102,19 +102,19 @@ extension _SSBodyStreamSource : _SSBodySource {
 }
 
 /// A body data source backed by `DispatchData`.
-internal final class _SSBodyDataSource {
+internal final class _BodyDataSource {
     var data: DispatchData! 
     init(data: DispatchData) {
         self.data = data
     }
 }
 
-extension _SSBodyDataSource : _SSBodySource {
+extension _BodyDataSource : _BodySource {
     enum _Error : Error {
         case unableToRewindData
     }
 
-    func getNextChunk(withLength length: Int) -> _SSBodySourceDataChunk {
+    func getNextChunk(withLength length: Int) -> _BodySourceDataChunk {
         let remaining = data.count
         if remaining == 0 {
             return .done
@@ -142,7 +142,7 @@ extension _SSBodyDataSource : _SSBodySource {
 /// - Note: Calls to `getNextChunk(withLength:)` and callbacks from libdispatch
 /// should all happen on the same (serial) queue, and hence this code doesn't
 /// have to be thread safe.
-internal final class _SSBodyFileSource {
+internal final class _BodyFileSource {
     fileprivate let fileURL: URL
     fileprivate let channel: DispatchIO
     fileprivate let workQueue: DispatchQueue
@@ -191,7 +191,7 @@ internal final class _SSBodyFileSource {
     }
 }
 
-extension _SSBodyFileSource {
+extension _BodyFileSource {
     fileprivate var desiredBufferLength: Int { return 3 * CFURLSessionMaxWriteSize }
     /// Enqueue a dispatch I/O read to fill the buffer.
     ///
@@ -253,8 +253,8 @@ extension _SSBodyFileSource {
     }
 }
 
-extension _SSBodyFileSource : _SSBodySource {
-    func getNextChunk(withLength length: Int) -> _SSBodySourceDataChunk {    
+extension _BodyFileSource : _BodySource {
+    func getNextChunk(withLength length: Int) -> _BodySourceDataChunk {    
         switch availableChunk {
         case .empty:
             readNextChunk()

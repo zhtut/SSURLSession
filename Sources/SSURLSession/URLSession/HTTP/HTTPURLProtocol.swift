@@ -8,7 +8,7 @@
 //
 
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
-import Foundation
+import SwiftFoundation
 #else
 import Foundation
 #endif
@@ -17,7 +17,7 @@ import Foundation
 @_implementationOnly import CFURLSessionInterface
 import Dispatch
 
-internal class _SSHTTPURLProtocol: _SSNativeProtocol {
+internal class _HTTPURLProtocol: _NativeProtocol {
 
     // When processing redirects, the intermediate 3xx response bodies are normally discarded.
     // If the call to urlSession(_:task:willPerformHTTPRedirection:newRequest:completionHandler:)
@@ -27,11 +27,11 @@ internal class _SSHTTPURLProtocol: _SSNativeProtocol {
     var lastRedirectBody: Data? = nil
     private var redirectCount = 0
 
-    public required init(task: SSURLSessionTask, cachedResponse: SSCachedURLResponse?, client: SSURLProtocolClient?) {
+    public required init(task: URLSessionTask, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
         super.init(task: task, cachedResponse: cachedResponse, client: client)
     }
 
-    public required init(request: URLRequest, cachedResponse: SSCachedURLResponse?, client: SSURLProtocolClient?) {
+    public required init(request: URLRequest, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
         super.init(request: request, cachedResponse: cachedResponse, client: client)
     }
 
@@ -40,7 +40,7 @@ internal class _SSHTTPURLProtocol: _SSNativeProtocol {
         return true
     }
 
-    override func didReceive(headerData data: Data, contentLength: Int64) -> _SSEasyHandle._Action {
+    override func didReceive(headerData data: Data, contentLength: Int64) -> _EasyHandle._Action {
         guard case .transferInProgress(let ts) = internalState else {
             fatalError("Received header data, but no transfer in progress.")
         }
@@ -117,7 +117,7 @@ internal class _SSHTTPURLProtocol: _SSNativeProtocol {
         }
     }
     
-    override func canCache(_ response: SSCachedURLResponse) -> Bool {
+    override func canCache(_ response: CachedURLResponse) -> Bool {
         guard let httpRequest = task?.currentRequest else { return false }
         guard let httpResponse = response.response as? HTTPURLResponse else { return false }
         
@@ -127,7 +127,7 @@ internal class _SSHTTPURLProtocol: _SSNativeProtocol {
         let expirationStart: Date
         
         if let dateString = httpResponse.allHeaderFields["Date"] as? String,
-           let date = _SSHTTPURLProtocol.dateFormatter.date(from: dateString) {
+           let date = _HTTPURLProtocol.dateFormatter.date(from: dateString) {
             expirationStart = min(date, response.date) // Do not accept a date in the future of the point where we stored it, or of now if we haven't stored it yet. That is: a Date header can only make a response expire _faster_ than if it was issued now, and can't be used to prolong its age.
         } else {
             expirationStart = response.date
@@ -229,7 +229,7 @@ internal class _SSHTTPURLProtocol: _SSNativeProtocol {
         // We should not cache a response that has already expired. (This is also the expiration check for canRespondFromCaching(using:) below.)
         // We MUST ignore this if we have Cache-Control: max-age or s-maxage.
         if !hasMaxAge, let expires = httpResponse.allHeaderFields["Expires"] as? String {
-            guard let expiration = _SSHTTPURLProtocol.dateFormatter.date(from: expires) else {
+            guard let expiration = _HTTPURLProtocol.dateFormatter.date(from: expires) else {
                 // From the spec:
                 /* "A cache recipient MUST interpret invalid date formats, especially the
                  value "0", as representing a time in the past (i.e., 'already
@@ -254,7 +254,7 @@ internal class _SSHTTPURLProtocol: _SSNativeProtocol {
         return x
     }()
     
-    override func canRespondFromCache(using response: SSCachedURLResponse) -> Bool {
+    override func canRespondFromCache(using response: CachedURLResponse) -> Bool {
         // If somehow cached a response that shouldn't have been, we should remove it.
         guard canCache(response) else {
             // Calling super removes it from the cache and returns false, which is the default.
@@ -275,7 +275,7 @@ internal class _SSHTTPURLProtocol: _SSNativeProtocol {
         // values.
 
         //TODO: We could add a strong reference from the easy handle back to
-        // its SSURLSessionTask by means of CURLOPT_PRIVATE -- that would ensure
+        // its URLSessionTask by means of CURLOPT_PRIVATE -- that would ensure
         // that the task is always around while the handle is running.
         // We would have to break that retain cycle once the handle completes
         // its transfer.
@@ -312,16 +312,7 @@ internal class _SSHTTPURLProtocol: _SSNativeProtocol {
             fatalError("No URL in request.")
         }
         easyHandle.set(url: url)
-        
-        if let resolve = request.value(forHTTPHeaderField: "resolve") {
-            easyHandle.set(resolve: resolve)
-        }
-        
-        if let connectTo = request.value(forHTTPHeaderField: "connectTo") {
-            easyHandle.set(connectTo: connectTo)
-        }
-        
-        let session = task?.session as! SSURLSession
+        let session = task?.session as! URLSession
         let _config = session._configuration
         easyHandle.set(sessionConfig: _config)
         easyHandle.setAllowedProtocolsToHTTPAndHTTPS()
@@ -360,7 +351,7 @@ internal class _SSHTTPURLProtocol: _SSNativeProtocol {
         // httpAdditionalHeaders from session configuration first and then append/update the
         // request.allHTTPHeaders so that request.allHTTPHeaders can override httpAdditionalHeaders.
 
-        let httpSession = self.task?.session as! SSURLSession
+        let httpSession = self.task?.session as! URLSession
         var httpHeaders: [AnyHashable : Any]?
 
         if let hh = httpSession.configuration.httpAdditionalHeaders {
@@ -406,9 +397,8 @@ internal class _SSHTTPURLProtocol: _SSNativeProtocol {
         //TODO: the timeout value needs to be reset on every data transfer
 
         var timeoutInterval = Int(httpSession.configuration.timeoutIntervalForRequest) * 1000
-        let requestTimeOut = request.timeoutInterval
-        if !requestTimeOut.isInfinite && !requestTimeOut.isNaN && request.timeoutInterval > 0 {
-            timeoutInterval = Int(requestTimeOut) * 1000
+        if request.isTimeoutIntervalSet {
+            timeoutInterval = Int(request.timeoutInterval) * 1000
         }
         let timeoutHandler = DispatchWorkItem { [weak self] in
             guard let self = self, let task = self.task else {
@@ -431,7 +421,7 @@ internal class _SSHTTPURLProtocol: _SSNativeProtocol {
         }
 
         guard let task = self.task else { fatalError() }
-        easyHandle.timeoutTimer = _SSTimeoutSource(queue: task.workQueue, milliseconds: timeoutInterval, handler: timeoutHandler)
+        easyHandle.timeoutTimer = _TimeoutSource(queue: task.workQueue, milliseconds: timeoutInterval, handler: timeoutHandler)
         easyHandle.set(automaticBodyDecompression: true)
         easyHandle.set(requestMethod: request.httpMethod ?? "GET")
         // Always set the status as it may change if a HEAD is converted to a GET.
@@ -469,9 +459,9 @@ internal class _SSHTTPURLProtocol: _SSNativeProtocol {
             return
         }
 
-        guard let session = task?.session as? SSURLSession else { fatalError() }
+        guard let session = task?.session as? URLSession else { fatalError() }
 
-        if let delegate = session.delegate as? SSURLSessionTaskDelegate {
+        if let delegate = session.delegate as? URLSessionTaskDelegate {
             // At this point we need to change the internal state to note
             // that we're waiting for the delegate to call the completion
             // handler. Then we'll call the delegate callback
@@ -482,7 +472,7 @@ internal class _SSHTTPURLProtocol: _SSNativeProtocol {
             //TODO: Should the `public response: URLResponse` property be updated
             // before we call delegate API
             self.internalState = .waitingForRedirectCompletionHandler(response: response, bodyDataDrain: bodyDataDrain)
-            // We need this ugly cast in order to be able to support `SSURLSessionTask.init()`
+            // We need this ugly cast in order to be able to support `URLSessionTask.init()`
             session.delegateQueue.addOperation {
                 delegate.urlSession(session, task: self.task!, willPerformHTTPRedirection: response as! HTTPURLResponse, newRequest: request) { [weak self] (request: URLRequest?) in
                     guard let self = self else { return }
@@ -494,12 +484,12 @@ internal class _SSHTTPURLProtocol: _SSNativeProtocol {
         } else {
             // Follow the redirect. Need to configure new request with cookies, etc.
             let configuredRequest = session._configuration.configure(request: request)
-            task?.knownBody = SSURLSessionTask._Body.none
+            task?.knownBody = URLSessionTask._Body.none
             startNewTransfer(with: configuredRequest)
         }
     }
 
-    override func validateHeaderComplete(transferState: _SSNativeProtocol._TransferState) -> URLResponse? {
+    override func validateHeaderComplete(transferState: _NativeProtocol._TransferState) -> URLResponse? {
         if !transferState.isHeaderComplete {
             return HTTPURLResponse(url: transferState.url, statusCode: 200, httpVersion: "HTTP/0.9", headerFields: [:])
             /* we received body data before CURL tells us that the headers are complete, that happens for HTTP/0.9 simple responses, see
@@ -511,7 +501,7 @@ internal class _SSHTTPURLProtocol: _SSNativeProtocol {
     }
 }
 
-fileprivate extension _SSHTTPURLProtocol {
+fileprivate extension _HTTPURLProtocol {
 
     /// These are a list of headers that should be passed to libcurl.
     ///
@@ -597,7 +587,7 @@ fileprivate var userAgentString: String = {
 }()
 
 /// State Transfers
-extension _SSHTTPURLProtocol {
+extension _HTTPURLProtocol {
     fileprivate func didCompleteRedirectCallback(_ request: URLRequest?) {
         guard case .waitingForRedirectCompletionHandler(response: let response, bodyDataDrain: let bodyDataDrain) = self.internalState else {
             fatalError("Received callback for HTTP redirection, but we're not waiting for it. Was it called multiple times?")
@@ -607,7 +597,7 @@ extension _SSHTTPURLProtocol {
         // Otherwise, we'll start a new transfer with the passed in request.
         if let r = request {
             lastRedirectBody = nil
-            task?.knownBody = SSURLSessionTask._Body.none
+            task?.knownBody = URLSessionTask._Body.none
             startNewTransfer(with: r)
         } else {
             // If the redirect is not followed, return the redirect itself as the response
@@ -622,14 +612,14 @@ extension _SSHTTPURLProtocol {
 }
 
 /// Response processing
-internal extension _SSHTTPURLProtocol {
+internal extension _HTTPURLProtocol {
     /// Whenever we receive a response (i.e. a complete header) from libcurl,
     /// this method gets called.
     func didReceiveResponse() {
-        guard let _ = task as? SSURLSessionDataTask else { return }
+        guard let _ = task as? URLSessionDataTask else { return }
         guard case .transferInProgress(let ts) = self.internalState else { fatalError("Transfer not in progress.") }
         guard let response = ts.response as? HTTPURLResponse else { fatalError("Header complete, but not URL response.") }
-        guard let session = task?.session as? SSURLSession else { fatalError() }
+        guard let session = task?.session as? URLSession else { fatalError() }
         switch session.behaviour(for: self.task!) {
         case .noDelegate:
             break
