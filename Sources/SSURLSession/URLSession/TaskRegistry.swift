@@ -1,4 +1,4 @@
-// Foundation/URLSession/TaskRegistry.swift - URLSession & libcurl
+// Foundation/SSURLSession/TaskRegistry.swift - SSURLSession & libcurl
 //
 // This source file is part of the Swift.org open source project
 //
@@ -10,14 +10,14 @@
 //
 // -----------------------------------------------------------------------------
 ///
-/// These are libcurl helpers for the URLSession API code.
+/// These are libcurl helpers for the SSURLSession API code.
 /// - SeeAlso: https://curl.haxx.se/libcurl/c/
-/// - SeeAlso: URLSession.swift
+/// - SeeAlso: SSURLSession.swift
 ///
 // -----------------------------------------------------------------------------
 
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
-import SwiftFoundation
+import Foundation
 #else
 import Foundation
 #endif
@@ -25,23 +25,23 @@ import Foundation
 @_implementationOnly import CoreFoundation
 import Dispatch
 
-extension URLSession {
+extension SSURLSession {
     /// This helper class keeps track of all tasks, and their behaviours.
     ///
-    /// Each `URLSession` has a `TaskRegistry` for its running tasks. The
+    /// Each `SSURLSession` has a `TaskRegistry` for its running tasks. The
     /// *behaviour* defines what action is to be taken e.g. upon completion.
     /// The behaviour stores the completion handler for tasks that are
     /// completion handler based.
     ///
     /// - Note: This must **only** be accessed on the owning session's work queue.
     class _TaskRegistry {
-        /// Completion handler for `URLSessionDataTask`, and `URLSessionUploadTask`.
+        /// Completion handler for `SSURLSessionDataTask`, and `SSURLSessionUploadTask`.
         typealias DataTaskCompletion = (Data?, URLResponse?, Error?) -> Void
         /// Completion handler for `URLSessionDownloadTask`.
         typealias DownloadTaskCompletion = (URL?, URLResponse?, Error?) -> Void
         /// What to do upon events (such as completion) of a specific task.
         enum _Behaviour {
-            /// Call the `URLSession`s delegate
+            /// Call the `SSURLSession`s delegate
             case callDelegate
             /// Default action for all events, except for completion.
             case dataCompletionHandler(DataTaskCompletion)
@@ -49,17 +49,17 @@ extension URLSession {
             case downloadCompletionHandler(DownloadTaskCompletion)
         }
         
-        fileprivate var tasks: [Int: URLSessionTask] = [:]
+        fileprivate var tasks: [Int: SSURLSessionTask] = [:]
         fileprivate var behaviours: [Int: _Behaviour] = [:]
         fileprivate var tasksFinishedCallback: (() -> Void)?
     }
 }
 
-extension URLSession._TaskRegistry {
+extension SSURLSession._TaskRegistry {
     /// Add a task
     ///
     /// - Note: This must **only** be accessed on the owning session's work queue.
-    func add(_ task: URLSessionTask, behaviour: _Behaviour) {
+    func add(_ task: SSURLSessionTask, behaviour: _Behaviour) {
         let identifier = task.taskIdentifier
         guard identifier != 0 else { fatalError("Invalid task identifier") }
         guard tasks.index(forKey: identifier) == nil else {
@@ -75,7 +75,7 @@ extension URLSession._TaskRegistry {
     /// Remove a task
     ///
     /// - Note: This must **only** be accessed on the owning session's work queue.
-    func remove(_ task: URLSessionTask) {
+    func remove(_ task: SSURLSessionTask) {
         let identifier = task.taskIdentifier
         guard identifier != 0 else { fatalError("Invalid task identifier") }
         guard let tasksIdx = tasks.index(forKey: identifier) else {
@@ -101,16 +101,16 @@ extension URLSession._TaskRegistry {
         return tasks.isEmpty
     }
     
-    var allTasks: [URLSessionTask] {
+    var allTasks: [SSURLSessionTask] {
         return tasks.map { $0.value }
     }
 }
-extension URLSession._TaskRegistry {
+extension SSURLSession._TaskRegistry {
     /// The behaviour that's registered for the given task.
     ///
     /// - Note: It is a programming error to pass a task that isn't registered.
     /// - Note: This must **only** be accessed on the owning session's work queue.
-    func behaviour(for task: URLSessionTask) -> _Behaviour {
+    func behaviour(for task: SSURLSessionTask) -> _Behaviour {
         guard let b = behaviours[task.taskIdentifier] else {
             fatalError("Trying to access a behaviour for a task that in not in the registry.")
         }

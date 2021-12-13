@@ -1,4 +1,4 @@
-// Foundation/URLSession/Configuration.swift - URLSession & libcurl
+// Foundation/SSURLSession/Configuration.swift - SSURLSession & libcurl
 //
 // This source file is part of the Swift.org open source project
 //
@@ -10,20 +10,20 @@
 //
 // -----------------------------------------------------------------------------
 ///
-/// These are libcurl helpers for the URLSession API code.
+/// These are libcurl helpers for the SSURLSession API code.
 /// - SeeAlso: https://curl.haxx.se/libcurl/c/
-/// - SeeAlso: URLSession.swift
+/// - SeeAlso: SSURLSession.swift
 ///
 // -----------------------------------------------------------------------------
 
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
-import SwiftFoundation
+import Foundation
 #else
 import Foundation
 #endif
 
-internal extension URLSession {
-    /// This is an immutable / `struct` version of `URLSessionConfiguration`.
+internal extension SSURLSession {
+    /// This is an immutable / `struct` version of `SSURLSessionConfiguration`.
     struct _Configuration {
         /// identifier for the background session configuration
         let identifier: String?
@@ -72,7 +72,7 @@ internal extension URLSession {
         let urlCredentialStorage: URLCredentialStorage?
         
         /// The URL resource cache, or nil to indicate that no caching is to be performed
-        let urlCache: URLCache?
+        let urlCache: SSURLCache?
         
         /// Enable extended background idle mode for any tcp sockets created.
         let shouldUseExtendedBackgroundIdleMode: Bool
@@ -80,8 +80,8 @@ internal extension URLSession {
         let protocolClasses: [AnyClass]?
     }
 }
-internal extension URLSession._Configuration {
-    init(URLSessionConfiguration config: URLSessionConfiguration) {
+internal extension SSURLSession._Configuration {
+    init(SSURLSessionConfiguration config: SSURLSessionConfiguration) {
         identifier = config.identifier
         requestCachePolicy = config.requestCachePolicy
         timeoutIntervalForRequest = config.timeoutIntervalForRequest
@@ -104,7 +104,7 @@ internal extension URLSession._Configuration {
 }
 
 // Configure NSURLRequests
-internal extension URLSession._Configuration {
+internal extension SSURLSession._Configuration {
     func configure(request: URLRequest) -> URLRequest {
         return setCookies(on: request)
     }
@@ -124,8 +124,8 @@ internal extension URLSession._Configuration {
 }
 
 // Cache Management
-private extension URLSession._Configuration {
-    func cachedResponse(forRequest request: URLRequest) -> CachedURLResponse? {
+private extension SSURLSession._Configuration {
+    func cachedResponse(forRequest request: URLRequest) -> SSCachedURLResponse? {
         //TODO: Check the policy & consult the cache.
         // There's more detail on how this should work here:
         // <https://developer.apple.com/library/prerelease/ios/documentation/Cocoa/Reference/Foundation/Classes/NSURLRequest_Class/index.html#//apple_ref/swift/enum/c:@E@URLRequestCachePolicy>

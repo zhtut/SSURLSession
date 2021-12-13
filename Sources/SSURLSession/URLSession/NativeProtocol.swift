@@ -1,4 +1,4 @@
-// Foundation/URLSession/NativeProtocol.swift - NSURLSession & libcurl
+// Foundation/SSURLSession/NativeProtocol.swift - NSURLSession & libcurl
 //
 // This source file is part of the Swift.org open source project
 //
@@ -11,14 +11,14 @@
 // -----------------------------------------------------------------------------
 ///
 /// This file has the common implementation of Native protocols like HTTP,FTP,Data
-/// These are libcurl helpers for the URLSession API code.
+/// These are libcurl helpers for the SSURLSession API code.
 /// - SeeAlso: https://curl.haxx.se/libcurl/c/
 /// - SeeAlso: NSURLSession.swift
 ///
 // -----------------------------------------------------------------------------
 
 #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
-import SwiftFoundation
+import Foundation
 #else
 import Foundation
 #endif
@@ -33,25 +33,25 @@ internal let enableDebugOutput: Bool = {
     return ProcessInfo.processInfo.environment["URLSessionDebug"] != nil
 }()
 
-internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
-    internal var easyHandle: _EasyHandle!
+internal class _SSNativeProtocol: SSURLProtocol, _SSEasyHandleDelegate {
+    internal var easyHandle: _SSEasyHandle!
     internal lazy var tempFileURL: URL = {
         let fileName = NSTemporaryDirectory() + NSUUID().uuidString + ".tmp"
         _ = FileManager.default.createFile(atPath: fileName, contents: nil)
         return URL(fileURLWithPath: fileName)
     }()
 
-    public required init(task: URLSessionTask, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
+    public required init(task: SSURLSessionTask, cachedResponse: SSCachedURLResponse?, client: SSURLProtocolClient?) {
         self.internalState = .initial
         super.init(request: task.originalRequest!, cachedResponse: cachedResponse, client: client)
         self.task = task
-        self.easyHandle = _EasyHandle(delegate: self)
+        self.easyHandle = _SSEasyHandle(delegate: self)
     }
 
-    public required init(request: URLRequest, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
+    public required init(request: URLRequest, cachedResponse: SSCachedURLResponse?, client: SSURLProtocolClient?) {
         self.internalState = .initial
         super.init(request: request, cachedResponse: cachedResponse, client: client)
-        self.easyHandle = _EasyHandle(delegate: self)
+        self.easyHandle = _SSEasyHandle(delegate: self)
     }
 
     override class func canonicalRequest(for request: URLRequest) -> URLRequest {
@@ -94,7 +94,7 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
         }
     }
 
-    func didReceive(data: Data) -> _EasyHandle._Action {
+    func didReceive(data: Data) -> _SSEasyHandle._Action {
         guard case .transferInProgress(var ts) = internalState else {
             fatalError("Received body data, but no transfer in progress.")
         }
@@ -106,7 +106,7 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
         // Note this excludes code 300 which should return the response of the redirect and not follow it.
         // For other redirect codes dont notify the delegate of the data received in the redirect response.
         if let httpResponse = ts.response as? HTTPURLResponse, 301...308 ~= httpResponse.statusCode {
-            if let _http = self as? _HTTPURLProtocol {
+            if let _http = self as? _SSHTTPURLProtocol {
                 // Save the response body in case the delegate does not perform a redirect and the 3xx response
                 // including its body needs to be returned to the client.
                 var redirectBody = _http.lastRedirectBody ?? Data()
@@ -133,19 +133,19 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
             fatalError("Cannot notify")
         }
         if case .taskDelegate(let delegate) = t.session.behaviour(for: self.task!),
-            let dataDelegate = delegate as? URLSessionDataDelegate,
-            let task = self.task as? URLSessionDataTask {
+            let dataDelegate = delegate as? SSURLSessionDataDelegate,
+            let task = self.task as? SSURLSessionDataTask {
             // Forward to the delegate:
-            guard let s = self.task?.session as? URLSession else {
+            guard let s = self.task?.session as? SSURLSession else {
                 fatalError()
             }
             s.delegateQueue.addOperation {
                 dataDelegate.urlSession(s, dataTask: task, didReceive: data)
             }
         } else if case .taskDelegate(let delegate) = t.session.behaviour(for: self.task!),
-            let downloadDelegate = delegate as? URLSessionDownloadDelegate,
+            let downloadDelegate = delegate as? SSURLSessionDownloadDelegate,
             let task = self.task as? URLSessionDownloadTask {
-            guard let s = self.task?.session as? URLSession else {
+            guard let s = self.task?.session as? SSURLSession else {
                 fatalError()
             }
             let fileHandle = try! FileHandle(forWritingTo: self.tempFileURL)
@@ -160,7 +160,7 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
     }
 
     fileprivate func notifyDelegate(aboutUploadedData count: Int64) {
-        guard let task = self.task, let session = task.session as? URLSession,
+        guard let task = self.task, let session = task.session as? SSURLSession,
             case .taskDelegate(let delegate) = session.behaviour(for: task) else { return }
         task.countOfBytesSent += count
         session.delegateQueue.addOperation {
@@ -169,11 +169,11 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
         }
     }
 
-    func didReceive(headerData data: Data, contentLength: Int64) -> _EasyHandle._Action {
+    func didReceive(headerData data: Data, contentLength: Int64) -> _SSEasyHandle._Action {
         NSRequiresConcreteImplementation()
     }
 
-    func fill(writeBuffer buffer: UnsafeMutableBufferPointer<Int8>) -> _EasyHandle._WriteBufferResult {
+    func fill(writeBuffer buffer: UnsafeMutableBufferPointer<Int8>) -> _SSEasyHandle._WriteBufferResult {
         guard case .transferInProgress(let ts) = internalState else {
             fatalError("Requested to fill write buffer, but transfer isn't in progress.")
         }
@@ -280,11 +280,11 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
 
     func seekInputStream(to position: UInt64) throws {
         // We will reset the body source and seek forward.
-        guard let session = task?.session as? URLSession else { fatalError() }
+        guard let session = task?.session as? SSURLSession else { fatalError() }
         
         var currentInputStream: InputStream?
         
-        if let delegate = session.delegate as? URLSessionTaskDelegate {
+        if let delegate = session.delegate as? SSURLSessionTaskDelegate {
             let dispatchGroup = DispatchGroup()
             dispatchGroup.enter()
             
@@ -300,10 +300,10 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
             switch self.internalState {
             case .transferInProgress(let currentTransferState):
                 switch currentTransferState.requestBodySource {
-                case is _BodyStreamSource:
+                case is _SSBodyStreamSource:
                     try _InputStreamSPIForFoundationNetworkingUseOnly(inputStream).seek(to: position)
                     let drain = self.createTransferBodyDataDrain()
-                    let source = _BodyStreamSource(inputStream: inputStream)
+                    let source = _SSBodyStreamSource(inputStream: inputStream)
                     let transferState = _TransferState(url: url, bodyDataDrain: drain, bodySource: source)
                     self.internalState = .transferInProgress(transferState)
                 default:
@@ -316,7 +316,7 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
         }
     }
 
-    func updateProgressMeter(with progress: _EasyHandle._Progress) {
+    func updateProgressMeter(with progress: _SSEasyHandle._Progress) {
         guard let progressReporter = self.task?.progress else { return }
         
         progressReporter.totalUnitCount = progress.totalBytesExpectedToReceive + progress.totalBytesExpectedToSend
@@ -330,7 +330,7 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
         guard let task = task else {
             fatalError()
         }
-        let s = task.session as! URLSession
+        let s = task.session as! SSURLSession
         switch s.behaviour(for: task) {
         case .noDelegate:
             return .ignore
@@ -355,16 +355,16 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
         case .none:
             return _TransferState(url: url, bodyDataDrain: drain)
         case .data(let data):
-            let source = _BodyDataSource(data: data)
+            let source = _SSBodyDataSource(data: data)
             return _TransferState(url: url, bodyDataDrain: drain,bodySource: source)
         case .file(let fileURL):
-            let source = _BodyFileSource(fileURL: fileURL, workQueue: workQueue, dataAvailableHandler: { [weak self] in
+            let source = _SSBodyFileSource(fileURL: fileURL, workQueue: workQueue, dataAvailableHandler: { [weak self] in
                 // Unpause the easy handle
                 self?.easyHandle.unpauseSend()
             })
             return _TransferState(url: url, bodyDataDrain: drain,bodySource: source)
         case .stream(let inputStream):
-            let source = _BodyStreamSource(inputStream: inputStream)
+            let source = _SSBodyStreamSource(inputStream: inputStream)
             return _TransferState(url: url, bodyDataDrain: drain, bodySource: source)
         }
     }
@@ -418,14 +418,14 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
         }
     }
     
-    func canCache(_ response: CachedURLResponse) -> Bool {
+    func canCache(_ response: SSCachedURLResponse) -> Bool {
         return false
     }
     
     /// Allows a native protocol to process a cached response. If `true` is returned, the protocol will replay the cached response instead of starting a new transfer. The default implementation invalidates the response in the cache and returns `false`.
-    func canRespondFromCache(using response: CachedURLResponse) -> Bool {
+    func canRespondFromCache(using response: SSCachedURLResponse) -> Bool {
         // By default, native protocols do not cache. Aggressively remove unexpected cached responses.
-        if let cache = task?.session.configuration.urlCache, let task = task as? URLSessionDataTask {
+        if let cache = task?.session.configuration.urlCache, let task = task as? SSURLSessionDataTask {
             cache.removeCachedResponse(for: task)
         }
         return false
@@ -442,7 +442,7 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
     }
 }
 
-extension _NativeProtocol {
+extension _SSNativeProtocol {
     /// Action to be taken after a transfer completes
     enum _CompletionAction {
         case completeTask
@@ -479,7 +479,7 @@ extension _NativeProtocol {
     /// response / complete header.
     ///
     /// This will pause the transfer.
-    func askDelegateHowToProceedAfterCompleteResponse(_ response: URLResponse, delegate: URLSessionDataDelegate) {
+    func askDelegateHowToProceedAfterCompleteResponse(_ response: URLResponse, delegate: SSURLSessionDataDelegate) {
         // Ask the delegate how to proceed.
         // This will pause the easy handle. We need to wait for the
         // delegate before processing any more data.
@@ -488,10 +488,10 @@ extension _NativeProtocol {
         }
         self.internalState = .waitingForResponseCompletionHandler(ts)
 
-        let dt = task as! URLSessionDataTask
+        let dt = task as! SSURLSessionDataTask
 
-        // We need this ugly cast in order to be able to support `URLSessionTask.init()`
-        guard let s = task?.session as? URLSession else {
+        // We need this ugly cast in order to be able to support `SSURLSessionTask.init()`
+        guard let s = task?.session as? SSURLSession else {
             fatalError()
         }
         s.delegateQueue.addOperation {
@@ -506,7 +506,7 @@ extension _NativeProtocol {
 
     /// This gets called (indirectly) when the data task delegates lets us know
     /// how we should proceed after receiving a response (i.e. complete header).
-    func didCompleteResponseCallback(disposition: URLSession.ResponseDisposition) {
+    func didCompleteResponseCallback(disposition: SSURLSession.ResponseDisposition) {
         guard case .waitingForResponseCompletionHandler(let ts) = self.internalState else {
             fatalError("Received response disposition, but we're not waiting for it.")
         }
@@ -528,13 +528,13 @@ extension _NativeProtocol {
     }
 }
 
-extension _NativeProtocol {
+extension _SSNativeProtocol {
 
     enum _InternalState {
         /// Task has been created, but nothing has been done, yet
         case initial
         /// The task is being fulfilled from the cache rather than the network.
-        case fulfillingFromCache(CachedURLResponse)
+        case fulfillingFromCache(SSCachedURLResponse)
         /// The easy handle has been fully configured. But it is not added to
         /// the multi handle.
         case transferReady(_TransferState)
@@ -545,7 +545,7 @@ extension _NativeProtocol {
         /// The easy handle has been removed from the multi handle. This does
         /// not necessarily mean the task completed. A task that gets
         /// redirected will do multiple transfers.
-        case transferCompleted(response: URLResponse, bodyDataDrain: _NativeProtocol._DataDrain)
+        case transferCompleted(response: URLResponse, bodyDataDrain: _SSNativeProtocol._DataDrain)
         /// The transfer failed.
         ///
         /// Same as `.transferCompleted`, but without response / body data
@@ -555,7 +555,7 @@ extension _NativeProtocol {
         /// When we tell the delegate that we're about to perform an HTTP
         /// redirect, we need to wait for the delegate to let us know what
         /// action to take.
-        case waitingForRedirectCompletionHandler(response: URLResponse, bodyDataDrain: _NativeProtocol._DataDrain)
+        case waitingForRedirectCompletionHandler(response: URLResponse, bodyDataDrain: _SSNativeProtocol._DataDrain)
         /// Waiting for the completion handler of the 'did receive response' callback.
         ///
         /// When we tell the delegate that we received a response (i.e. when
@@ -570,7 +570,7 @@ extension _NativeProtocol {
     }
 }
 
-extension _NativeProtocol._InternalState {
+extension _SSNativeProtocol._InternalState {
     var isEasyHandleAddedToMultiHandle: Bool {
         switch self {
         case .initial:                             return false
@@ -600,7 +600,7 @@ extension _NativeProtocol._InternalState {
     }
 }
 
-extension _NativeProtocol {
+extension _SSNativeProtocol {
 
     enum _Error: Error {
         case parseSingleLineError
@@ -627,21 +627,21 @@ extension _NativeProtocol {
     }
 }
 
-extension _NativeProtocol._ResponseHeaderLines {
+extension _SSNativeProtocol._ResponseHeaderLines {
     func createURLResponse(for URL: URL, contentLength: Int64) -> URLResponse? {
         return URLResponse(url: URL, mimeType: nil, expectedContentLength: Int(contentLength), textEncodingName: nil)
     }
 }
 
-internal extension _NativeProtocol {
-    typealias _Body = URLSessionTask._Body
+internal extension _SSNativeProtocol {
+    typealias _Body = SSURLSessionTask._Body
 }
 
-extension _NativeProtocol {
+extension _SSNativeProtocol {
     /// Set request body length.
     ///
     /// An unknown length
-    func set(requestBodyLength length: _HTTPURLProtocol._RequestBodyLength) {
+    func set(requestBodyLength length: _SSHTTPURLProtocol._RequestBodyLength) {
         switch length {
         case .noBody:
             easyHandle.set(upload: false)
@@ -664,9 +664,62 @@ extension _NativeProtocol {
     }
 }
 
-extension URLSession {
+extension SSURLSession {
     static func printDebug(_ text: @autoclosure () -> String) {
         guard enableDebugOutput else { return }
         debugPrint(text())
+    }
+}
+
+public struct _InputStreamSPIForFoundationNetworkingUseOnly {
+    var inputStream: InputStream
+    
+    public init(_ inputStream: InputStream) {
+        self.inputStream = inputStream
+    }
+    
+    public func seek(to position: UInt64) throws {
+        try inputStream.seek(to: position)
+    }
+}
+
+extension InputStream {
+    enum _Error: Error {
+        case cantSeekInputStream
+    }
+    
+    func seek(to position: UInt64) throws {
+        guard position > 0 else {
+            return
+        }
+        
+        guard position < Int.max else { throw _Error.cantSeekInputStream }
+        
+        let bufferSize = 1024
+        var remainingBytes = Int(position)
+        
+        let buffer = UnsafeMutableRawBufferPointer.allocate(byteCount: bufferSize, alignment: MemoryLayout<UInt8>.alignment)
+        
+        guard let pointer = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+            buffer.deallocate()
+            throw _Error.cantSeekInputStream
+        }
+        
+        if self.streamStatus == .notOpen {
+            self.open()
+        }
+        
+        while remainingBytes > 0 && self.hasBytesAvailable {
+            let read = self.read(pointer, maxLength: min(bufferSize, remainingBytes))
+            if read == -1 {
+                throw _Error.cantSeekInputStream
+            }
+            remainingBytes -= read
+        }
+        
+        buffer.deallocate()
+        if remainingBytes != 0 {
+            throw _Error.cantSeekInputStream
+        }
     }
 }
