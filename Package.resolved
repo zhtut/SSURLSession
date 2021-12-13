@@ -2,6 +2,15 @@
   "object": {
     "pins": [
       {
+        "package": "CFURLSessionInterface",
+        "repositoryURL": "https://github.com/zhtut/CFURLSessionInterface.git",
+        "state": {
+          "branch": null,
+          "revision": "415af50cf914ddb340d9e26c17e6d13d941d9cfb",
+          "version": "0.1.4"
+        }
+      },
+      {
         "package": "curl",
         "repositoryURL": "https://github.com/zhtut/curl.git",
         "state": {
