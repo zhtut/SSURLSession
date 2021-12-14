@@ -170,7 +170,8 @@ import Foundation
 @_implementationOnly import CoreFoundation
 
 extension SSURLSession {
-    public enum DelayedRequestDisposition {
+    @objc
+    public enum DelayedRequestDisposition: Int {
         case cancel
         case continueLoading
         case useNewRequest
@@ -247,6 +248,7 @@ open class SSURLSession : NSObject {
      * A delegate queue should be serial to ensure correct ordering of callbacks.
      * However, if user supplies a concurrent delegateQueue it is not converted to serial.
      */
+    @objc
     public /*not inherited*/ init(configuration: SSURLSessionConfiguration, delegate: SSURLSessionDelegate?, delegateQueue queue: OperationQueue?) {
         initializeLibcurl()
         identifier = nextSessionIdentifier()
@@ -269,14 +271,18 @@ open class SSURLSession : NSObject {
         let _ = SSURLSession.registerProtocols
     }
     
+    @objc
     open private(set) var delegateQueue: OperationQueue
+    @objc
     open private(set) var delegate: SSURLSessionDelegate?
+    @objc
     open private(set) var configuration: SSURLSessionConfiguration
     
     /*
      * The sessionDescription property is available for the developer to
      * provide a descriptive label for the session.
      */
+    @objc
     open var sessionDescription: String?
     
     /* -finishTasksAndInvalidate returns immediately and existing tasks will be allowed

@@ -25,6 +25,7 @@ extension SSURLSession {
     /*
      * Disposition options for various delegate messages
      */
+    @objc
     public enum AuthChallengeDisposition : Int {
     
         case useCredential /* Use the specified credential, which may be nil */
@@ -33,6 +34,7 @@ extension SSURLSession {
         case rejectProtectionSpace /* This challenge is rejected and the next authentication protection space should be tried; the credential parameter is ignored. */
     }
 
+    @objc
     public enum ResponseDisposition : Int {
         case cancel /* Cancel the load, this is the same as -[task cancel] */
         case allow /* Allow the load to continue */
@@ -54,6 +56,7 @@ extension SSURLSession {
 /*
  * Messages related to the URL session as a whole
  */
+@objc
 public protocol SSURLSessionDelegate : NSObjectProtocol {
     
     /* The last message a session receives.  A session will only become
@@ -91,6 +94,7 @@ extension SSURLSessionDelegate {
 /*
  * Messages related to the operation of a specific task.
  */
+@objc
 public protocol SSURLSessionTaskDelegate : SSURLSessionDelegate {
     
     /* An HTTP request is attempting to perform a redirection to a different
@@ -158,6 +162,7 @@ extension SSURLSessionTaskDelegate {
  * Messages related to the operation of a task that delivers data
  * directly to the delegate.
  */
+@objc
 public protocol SSURLSessionDataDelegate : SSURLSessionTaskDelegate {
     
     /// The task has received a response and no further messages will be
@@ -175,7 +180,7 @@ public protocol SSURLSessionDataDelegate : SSURLSessionTaskDelegate {
     /* Notification that a data task has become a download task.  No
      * future messages will be sent to the data task.
      */
-    func urlSession(_ session: SSURLSession, dataTask: SSURLSessionDataTask, didBecome downloadTask: URLSessionDownloadTask)
+    func urlSession(_ session: SSURLSession, dataTask: SSURLSessionDataTask, didBecomeDownloadTask downloadTask: URLSessionDownloadTask)
     
     /*
      * Notification that a data task has become a bidirectional stream
@@ -193,7 +198,7 @@ public protocol SSURLSessionDataDelegate : SSURLSessionTaskDelegate {
      * connection cache and won't count against the total number of
      * connections per host.
      */
-    func urlSession(_ session: SSURLSession, dataTask: SSURLSessionDataTask, didBecome streamTask: URLSessionStreamTask)
+    func urlSession(_ session: SSURLSession, dataTask: SSURLSessionDataTask, didBecomeStreamTask streamTask: URLSessionStreamTask)
     
     /* Sent when data is available for the delegate to consume.  It is
      * assumed that the delegate will retain and not copy the data.  As
@@ -229,6 +234,7 @@ extension SSURLSessionDataDelegate {
  * Messages related to the operation of a task that writes data to a
  * file and notifies the delegate upon completion.
  */
+@objc
 public protocol SSURLSessionDownloadDelegate : SSURLSessionTaskDelegate {
     
     /* Sent when a download task that has completed a download.  The delegate should
@@ -255,6 +261,7 @@ extension SSURLSessionDownloadDelegate {
     public func urlSession(_ session: SSURLSession, downloadTask: URLSessionDownloadTask, didResumeAtOffset fileOffset: Int64, expectedTotalBytes: Int64) { }
 }
 
+@objc
 public protocol SSURLSessionStreamDelegate : SSURLSessionTaskDelegate {
     
     /* Indicates that the read side of a connection has been closed.  Any

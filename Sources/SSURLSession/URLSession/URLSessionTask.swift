@@ -32,17 +32,21 @@ private class Bag<Element> {
 open class SSURLSessionTask : NSObject, NSCopying {
     
     // These properties aren't heeded in swift-corelibs-foundation, but we may heed them in the future. They exist for source compatibility.
+    @objc
     open var countOfBytesClientExpectsToReceive: Int64 = NSURLSessionTransferSizeUnknown {
         didSet { updateProgress() }
     }
+    @objc
     open var countOfBytesClientExpectsToSend: Int64 = NSURLSessionTransferSizeUnknown {
         didSet { updateProgress() }
     }
     
     #if NS_CURL_MISSING_XFERINFOFUNCTION
     @available(*, deprecated, message: "This platform doesn't fully support reporting the progress of a SSURLSessionTask. The progress instance returned will be functional, but may not have continuous updates as bytes are sent or received.")
+    @objc
     open private(set) var progress = Progress(totalUnitCount: -1)
     #else
+    @objc
     open private(set) var progress = Progress(totalUnitCount: -1)
     #endif
     
@@ -97,6 +101,7 @@ open class SSURLSessionTask : NSObject, NSCopying {
     
     // We're not going to heed this one. If someone is setting it in Linux code, they may be relying on behavior that isn't there; warn.
     @available(*, deprecated, message: "swift-corelibs-foundation does not support background SSURLSession instances, and this property is documented to have no effect when set on tasks created from non-background SSURLSession instances. Modifying this property has no effect in swift-corelibs-foundation and shouldn't be relied upon; resume tasks at the appropriate time instead.")
+    @objc
     open var earliestBeginDate: Date? = nil
     
     /// How many times the task has been suspended, 0 indicating a running task.
@@ -272,19 +277,23 @@ open class SSURLSessionTask : NSObject, NSCopying {
         //TODO: Do we remove the EasyHandle from the session here? This might run on the wrong thread / queue.
     }
     
+    @objc
     open override func copy() -> Any {
         return copy(with: nil)
     }
     
+    @objc
     open func copy(with zone: NSZone?) -> Any {
         return self
     }
     
     /// An identifier for this task, assigned by and unique to the owning session
+    @objc
     open internal(set) var taskIdentifier: Int
     
     /// May be nil if this is a stream task
     
+    @objc
     /*@NSCopying*/ open private(set) var originalRequest: URLRequest?
 
     /// If there's an authentication failure, we'd need to create a new request with the credentials supplied by the user
@@ -294,6 +303,7 @@ open class SSURLSessionTask : NSObject, NSCopying {
     fileprivate var previousFailureCount = 0
     
     /// May differ from originalRequest due to http server redirection
+    @objc
     /*@NSCopying*/ open internal(set) var currentRequest: URLRequest? {
         get {
             return self.syncQ.sync { return self._currentRequest }
@@ -319,6 +329,7 @@ open class SSURLSessionTask : NSObject, NSCopying {
      */
     
     /// Number of body bytes already received
+    @objc
     open internal(set) var countOfBytesReceived: Int64 {
         get {
             return self.syncQ.sync { return self._countOfBytesReceived }
@@ -331,6 +342,7 @@ open class SSURLSessionTask : NSObject, NSCopying {
     fileprivate var _countOfBytesReceived: Int64 = 0
     
     /// Number of body bytes already sent */
+    @objc
     open internal(set) var countOfBytesSent: Int64 {
         get {
             return self.syncQ.sync { return self._countOfBytesSent }
@@ -344,17 +356,20 @@ open class SSURLSessionTask : NSObject, NSCopying {
     fileprivate var _countOfBytesSent: Int64 = 0
     
     /// Number of body bytes we expect to send, derived from the Content-Length of the HTTP request */
+    @objc
     open internal(set) var countOfBytesExpectedToSend: Int64 = 0 {
         didSet { updateProgress() }
     }
     
     /// Number of bytes we expect to receive, usually derived from the Content-Length header of an HTTP response. */
+    @objc
     open internal(set) var countOfBytesExpectedToReceive: Int64 = 0 {
         didSet { updateProgress() }
     }
     
     /// The taskDescription property is available for the developer to
     /// provide a descriptive label for the task.
+    @objc
     open var taskDescription: String?
     
     /* -cancel returns immediately, but marks a task as being canceled.
@@ -363,6 +378,7 @@ open class SSURLSessionTask : NSObject, NSCopying {
      * cases, the task may signal other work before it acknowledges the
      * cancellation.  -cancel may be sent to a task that has been suspended.
      */
+    @objc
     open func cancel() {
         workQueue.sync {
             let canceled = self.syncQ.sync { () -> Bool in
@@ -392,6 +408,7 @@ open class SSURLSessionTask : NSObject, NSCopying {
     /*
      * The current state of the task within the session.
      */
+    @objc
     open fileprivate(set) var state: SSURLSessionTask.State {
         get {
             return self.syncQ.sync { self._state }
@@ -406,6 +423,7 @@ open class SSURLSessionTask : NSObject, NSCopying {
      * The error, if any, delivered via -SSURLSession:task:didCompleteWithError:
      * This property will be nil in the event that no error occurred.
      */
+    @objc
     /*@NSCopying*/ open internal(set) var error: Error?
     
     /// Suspend the task.
@@ -417,6 +435,7 @@ open class SSURLSessionTask : NSObject, NSCopying {
     /// until -resume is sent.  The timeout timer associated with the task
     /// will be disabled while a task is suspended. -suspend and -resume are
     /// nestable.
+    @objc
     open func suspend() {
         // suspend / resume is implemented simply by adding / removing the task's
         // easy handle fromt he session's multi-handle.
@@ -497,6 +516,7 @@ open class SSURLSessionTask : NSObject, NSCopying {
     /// as defined by the constant SSURLSessionTask.defaultPriority. Two additional
     /// priority levels are provided: SSURLSessionTask.lowPriority and
     /// SSURLSessionTask.highPriority, but use is not restricted to these.
+    @objc
     open var priority: Float {
         get {
             return self.workQueue.sync { return self._priority }
@@ -509,6 +529,7 @@ open class SSURLSessionTask : NSObject, NSCopying {
 }
 
 extension SSURLSessionTask {
+    @objc
     public enum State : Int {
         /// The task is currently being serviced by the session
         case running
@@ -593,14 +614,17 @@ fileprivate func errorCode(fileSystemError error: Error) -> Int {
 extension SSURLSessionTask {
     /// The default URL session task priority, used implicitly for any task you
     /// have not prioritized. The floating point value of this constant is 0.5.
+    @objc
     public static let defaultPriority: Float = 0.5
     
     /// A low URL session task priority, with a floating point value above the
     /// minimum of 0 and below the default value.
+    @objc
     public static let lowPriority: Float = 0.25
     
     /// A high URL session task priority, with a floating point value above the
     /// default value and below the maximum of 1.0.
+    @objc
     public static let highPriority: Float = 0.75
 }
 
@@ -609,6 +633,7 @@ extension SSURLSessionTask {
  * functionality over an SSURLSessionTask and its presence is merely
  * to provide lexical differentiation from download and upload tasks.
  */
+@objc
 open class SSURLSessionDataTask : SSURLSessionTask {
 }
 
@@ -618,6 +643,7 @@ open class SSURLSessionDataTask : SSURLSessionTask {
  * that may be sent referencing an SSURLSessionDataTask equally apply
  * to URLSessionUploadTasks.
  */
+@objc
 open class SSURLSessionUploadTask : SSURLSessionDataTask {
 }
 
@@ -625,6 +651,7 @@ open class SSURLSessionUploadTask : SSURLSessionDataTask {
  * URLSessionDownloadTask is a task that represents a download to
  * local storage.
  */
+@objc
 open class URLSessionDownloadTask : SSURLSessionTask {
     
     var createdFromInvalidResumeData = false
@@ -647,6 +674,7 @@ open class URLSessionDownloadTask : SSURLSessionTask {
      * If resume data cannot be created, the completion handler will be
      * called with nil resumeData.
      */
+    @objc
     open func cancel(byProducingResumeData completionHandler: @escaping (Data?) -> Void) {
         super.cancel()
         
@@ -1043,22 +1071,27 @@ class URLSessionAuthenticationChallengeSender : NSObject, URLAuthenticationChall
 }
 
 extension URLCredentialStorage {
+    @objc
     public func getCredentials(for protectionSpace: URLProtectionSpace, task: SSURLSessionTask, completionHandler: ([String : URLCredential]?) -> Void) {
         completionHandler(credentials(for: protectionSpace))
     }
     
+    @objc
     public func set(_ credential: URLCredential, for protectionSpace: URLProtectionSpace, task: SSURLSessionTask) {
         set(credential, for: protectionSpace)
     }
     
+    @objc
     public func remove(_ credential: URLCredential, for protectionSpace: URLProtectionSpace, options: [String : AnyObject]? = [:], task: SSURLSessionTask) {
         remove(credential, for: protectionSpace, options: options)
     }
     
+    @objc
     public func getDefaultCredential(for space: URLProtectionSpace, task: SSURLSessionTask, completionHandler: (URLCredential?) -> Void) {
         completionHandler(defaultCredential(for: space))
     }
     
+    @objc
     public func setDefaultCredential(_ credential: URLCredential, for protectionSpace: URLProtectionSpace, task: SSURLSessionTask) {
         setDefaultCredential(credential, for: protectionSpace)
     }
