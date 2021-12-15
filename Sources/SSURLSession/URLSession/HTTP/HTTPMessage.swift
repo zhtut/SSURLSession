@@ -1,4 +1,4 @@
-// Foundation/URLSession/HTTPMessage.swift - HTTP Message parsing
+// Foundation/SSURLSession/HTTPMessage.swift - HTTP Message parsing
 //
 // This source file is part of the Swift.org open source project
 //
@@ -11,9 +11,9 @@
 // -----------------------------------------------------------------------------
 ///
 /// Helpers for parsing HTTP responses.
-/// These are libcurl helpers for the URLSession API code.
+/// These are libcurl helpers for the SSURLSession API code.
 /// - SeeAlso: https://curl.haxx.se/libcurl/c/
-/// - SeeAlso: URLSession.swift
+/// - SeeAlso: SSURLSession.swift
 ///
 // -----------------------------------------------------------------------------
 
@@ -359,7 +359,7 @@ private extension String {
 }
 
 /// Parses an array of lines into an array of
-/// `URLSessionTask.HTTPMessage.Header`.
+/// `SSURLSessionTask.HTTPMessage.Header`.
 ///
 /// This respects the header folding as described by
 /// https://tools.ietf.org/html/rfc2616#section-2.2 :

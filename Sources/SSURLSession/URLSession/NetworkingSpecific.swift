@@ -13,27 +13,27 @@ import Foundation
 #endif
 
 internal func NSUnimplemented(_ fn: String = #function, file: StaticString = #file, line: UInt = #line) -> Never {
-#if os(Android)
+    #if os(Android)
     NSLog("\(fn) is not yet implemented. \(file):\(line)")
-#endif
+    #endif
     fatalError("\(fn) is not yet implemented", file: file, line: line)
 }
 
 internal func NSUnsupported(_ fn: String = #function, file: StaticString = #file, line: UInt = #line) -> Never {
-#if os(Android)
+    #if os(Android)
     NSLog("\(fn) is not supported. \(file):\(line)")
-#endif
+    #endif
     fatalError("\(fn) is not supported", file: file, line: line)
 }
 
 internal func NSRequiresConcreteImplementation(_ fn: String = #function, file: StaticString = #file, line: UInt = #line) -> Never {
-#if os(Android)
+    #if os(Android)
     NSLog("\(fn) must be overridden. \(file):\(line)")
-#endif
+    #endif
     fatalError("\(fn) must be overridden", file: file, line: line)
 }
 
-public protocol _NSNonfileURLContentLoading: AnyObject {
+internal protocol _NSNonfileURLContentLoading: AnyObject {
     init()
     func contentsOf(url: URL) throws -> (result: NSData, textEncodingNameIfAvailable: String?)
 }
@@ -45,7 +45,7 @@ class _NSNonfileURLContentLoader: _NSNonfileURLContentLoading {
     
     @usableFromInline
     func contentsOf(url: URL) throws -> (result: NSData, textEncodingNameIfAvailable: String?) {
-        
+
         func cocoaError(with error: Error? = nil) -> Error {
             var userInfo: [String: Any] = [:]
             if let error = error {
@@ -53,9 +53,9 @@ class _NSNonfileURLContentLoader: _NSNonfileURLContentLoading {
             }
             return CocoaError.error(.fileReadUnknown, userInfo: userInfo, url: url)
         }
-        
+
         var urlResponse: URLResponse?
-        let session = URLSession(configuration: URLSessionConfiguration.default)
+        let session = SSURLSession(configuration: SSURLSessionConfiguration.default)
         let cond = NSCondition()
         cond.lock()
         
@@ -77,21 +77,21 @@ class _NSNonfileURLContentLoader: _NSNonfileURLContentLoading {
             cond.wait()
         }
         cond.unlock()
-        
+
         guard resError == nil else {
             throw cocoaError(with: resError)
         }
-        
+
         guard let data = resData else {
             throw cocoaError()
         }
-        
+
         if let statusCode = (urlResponse as? HTTPURLResponse)?.statusCode {
             switch statusCode {
-                    // These are the only valid response codes that data will be returned for, all other codes will be treated as error.
+                // These are the only valid response codes that data will be returned for, all other codes will be treated as error.
                 case 101, 200...399, 401, 407:
                     return (data as NSData, urlResponse?.textEncodingName)
-                    
+
                 default:
                     break
             }

@@ -18,13 +18,11 @@ import Dispatch
 
 internal class _FTPURLProtocol: _NativeProtocol {
 
-    @objc
-    public required init(task: URLSessionTask, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
+    public required init(task: SSURLSessionTask, cachedResponse: SSCachedURLResponse?, client: SSURLProtocolClient?) {
         super.init(task: task, cachedResponse: cachedResponse, client: client)
     }
 
-    @objc
-    public required init(request: URLRequest, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
+    public required init(request: URLRequest, cachedResponse: SSCachedURLResponse?, client: SSURLProtocolClient?) {
         super.init(request: request, cachedResponse: cachedResponse, client: client)
     }
 
@@ -100,10 +98,10 @@ internal extension _FTPURLProtocol {
     /// Whenever we receive a response (i.e. a complete header) from libcurl,
     /// this method gets called.
     func didReceiveResponse() {
-        guard let _ = task as? URLSessionDataTask else { return }
+        guard let _ = task as? SSURLSessionDataTask else { return }
         guard case .transferInProgress(let ts) = self.internalState else { fatalError("Transfer not in progress.") }
         guard let response = ts.response else { fatalError("Header complete, but not URL response.") }
-        guard let session = task?.session as? URLSession else { fatalError() }
+        guard let session = task?.session as? SSURLSession else { fatalError() }
         switch session.behaviour(for: self.task!) {
         case .noDelegate:
             break

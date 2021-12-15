@@ -1,4 +1,4 @@
-// Foundation/URLSession/Message.swift -  Message parsing for native protocols
+// Foundation/SSURLSession/Message.swift -  Message parsing for native protocols
 //
 // This source file is part of the Swift.org open source project
 //
@@ -10,9 +10,9 @@
 //
 // -----------------------------------------------------------------------------
 ///
-/// These are libcurl helpers for the URLSession API code.
+/// These are libcurl helpers for the SSURLSession API code.
 /// - SeeAlso: https://curl.haxx.se/libcurl/c/
-/// - SeeAlso: URLSession.swift
+/// - SeeAlso: SSURLSession.swift
 ///
 // -----------------------------------------------------------------------------
 

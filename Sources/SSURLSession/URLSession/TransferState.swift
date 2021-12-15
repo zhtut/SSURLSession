@@ -1,4 +1,4 @@
-// Foundation/URLSession/TransferState.swift - URLSession & libcurl
+// Foundation/SSURLSession/TransferState.swift - SSURLSession & libcurl
 //
 // This source file is part of the Swift.org open source project
 //
@@ -11,9 +11,9 @@
 // -----------------------------------------------------------------------------
 ///
 /// The state of a single transfer.
-/// These are libcurl helpers for the URLSession API code.
+/// These are libcurl helpers for the SSURLSession API code.
 /// - SeeAlso: https://curl.haxx.se/libcurl/c/
-/// - SeeAlso: URLSession.swift
+/// - SeeAlso: SSURLSession.swift
 ///
 // -----------------------------------------------------------------------------
 
@@ -35,7 +35,7 @@ extension _NativeProtocol {
     /// `TransferState`.
     ///
     /// - TODO: Might move the `EasyHandle` into this `struct` ?
-    /// - SeeAlso: `URLSessionTask.EasyHandle`
+    /// - SeeAlso: `SSURLSessionTask.EasyHandle`
     internal struct _TransferState {
         /// The URL that's being requested
         let url: URL
@@ -93,7 +93,7 @@ extension _HTTPURLProtocol._TransferState {
         // is a complete header. Otherwise it's a partial header.
         // - Note: Appending a line to a complete header results in a partial
         // header with just that line.
-        
+
         func isCompleteHeader(_ headerLine: String) -> Bool {
             return headerLine.isEmpty
         }
@@ -124,7 +124,7 @@ extension _FTPURLProtocol._TransferState {
         case syntaxError = 500// 500 series FTP Syntax errors
         case errorOccurred = 400 // 400 Series FTP transfer errors
     }
-    
+
     /// Appends a header line
     ///
     /// Will set the complete response once the header is complete, i.e. the
@@ -134,8 +134,8 @@ extension _FTPURLProtocol._TransferState {
     func byAppendingFTP(headerLine data: Data, expectedContentLength: Int64) throws -> _NativeProtocol._TransferState {
         guard let line = String(data: data, encoding: String.Encoding.utf8) else {
             fatalError("Data on command port is nil")
-        }
-        
+	}
+
         //FTP Status code 226 marks the end of the transfer
         if (line.starts(with: String(FTPHeaderCode.transferCompleted.rawValue))) {
             return self
@@ -148,7 +148,7 @@ extension _FTPURLProtocol._TransferState {
         guard let h = parsedResponseHeader.byAppending(headerLine: data, onHeaderCompleted: isCompleteHeader) else {
             throw _NativeProtocol._Error.parseSingleLineError
         }
-        
+
         if case .complete(let lines) = h {
             let response = lines.createURLResponse(for: url, contentLength: expectedContentLength)
             guard response != nil else {
@@ -162,12 +162,12 @@ extension _FTPURLProtocol._TransferState {
 }
 
 extension _NativeProtocol._TransferState {
-    
+
     enum _Error: Error {
         case parseSingleLineError
         case parseCompleteHeaderError
     }
-    
+
     var isHeaderComplete: Bool {
         return response != nil
     }
@@ -178,19 +178,19 @@ extension _NativeProtocol._TransferState {
     ///     expensive. This behaviour
     func byAppending(bodyData buffer: Data) -> _NativeProtocol._TransferState {
         switch bodyDataDrain {
-            case .inMemory(let bodyData):
-                let data: NSMutableData = bodyData ?? NSMutableData()
-                data.append(buffer)
-                let drain = _NativeProtocol._DataDrain.inMemory(data)
-                return _NativeProtocol._TransferState(url: url, parsedResponseHeader: parsedResponseHeader, response: response, requestBodySource: requestBodySource, bodyDataDrain: drain)
-            case .toFile(_, let fileHandle):
-                //TODO: Create / open the file for writing
-                // Append to the file
-                _ = fileHandle!.seekToEndOfFile()
-                fileHandle!.write(buffer)
-                return self
-            case .ignore:
-                return self
+        case .inMemory(let bodyData):
+            let data: NSMutableData = bodyData ?? NSMutableData()
+            data.append(buffer)
+            let drain = _NativeProtocol._DataDrain.inMemory(data)
+            return _NativeProtocol._TransferState(url: url, parsedResponseHeader: parsedResponseHeader, response: response, requestBodySource: requestBodySource, bodyDataDrain: drain)
+        case .toFile(_, let fileHandle):
+             //TODO: Create / open the file for writing
+             // Append to the file
+             _ = fileHandle!.seekToEndOfFile()
+             fileHandle!.write(buffer)
+             return self
+        case .ignore:
+            return self
         }
     }
     /// Sets the given body source on the transfer state.

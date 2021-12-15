@@ -27,13 +27,11 @@ internal class _HTTPURLProtocol: _NativeProtocol {
     var lastRedirectBody: Data? = nil
     private var redirectCount = 0
 
-    @objc
-    public required init(task: URLSessionTask, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
+    public required init(task: SSURLSessionTask, cachedResponse: SSCachedURLResponse?, client: SSURLProtocolClient?) {
         super.init(task: task, cachedResponse: cachedResponse, client: client)
     }
 
-    @objc
-    public required init(request: URLRequest, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
+    public required init(request: URLRequest, cachedResponse: SSCachedURLResponse?, client: SSURLProtocolClient?) {
         super.init(request: request, cachedResponse: cachedResponse, client: client)
     }
 
@@ -119,7 +117,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         }
     }
     
-    override func canCache(_ response: CachedURLResponse) -> Bool {
+    override func canCache(_ response: SSCachedURLResponse) -> Bool {
         guard let httpRequest = task?.currentRequest else { return false }
         guard let httpResponse = response.response as? HTTPURLResponse else { return false }
         
@@ -256,7 +254,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         return x
     }()
     
-    override func canRespondFromCache(using response: CachedURLResponse) -> Bool {
+    override func canRespondFromCache(using response: SSCachedURLResponse) -> Bool {
         // If somehow cached a response that shouldn't have been, we should remove it.
         guard canCache(response) else {
             // Calling super removes it from the cache and returns false, which is the default.
@@ -277,7 +275,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         // values.
 
         //TODO: We could add a strong reference from the easy handle back to
-        // its URLSessionTask by means of CURLOPT_PRIVATE -- that would ensure
+        // its SSURLSessionTask by means of CURLOPT_PRIVATE -- that would ensure
         // that the task is always around while the handle is running.
         // We would have to break that retain cycle once the handle completes
         // its transfer.
@@ -314,16 +312,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
             fatalError("No URL in request.")
         }
         easyHandle.set(url: url)
-        
-        if let resolve = request.value(forHTTPHeaderField: "resolve") {
-            easyHandle.set(resolve: resolve)
-        }
-        
-        if let connectTo = request.value(forHTTPHeaderField: "connectTo") {
-            easyHandle.set(connectTo: connectTo)
-        }
-
-        let session = task?.session as! URLSession
+        let session = task?.session as! SSURLSession
         let _config = session._configuration
         easyHandle.set(sessionConfig: _config)
         easyHandle.setAllowedProtocolsToHTTPAndHTTPS()
@@ -362,7 +351,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         // httpAdditionalHeaders from session configuration first and then append/update the
         // request.allHTTPHeaders so that request.allHTTPHeaders can override httpAdditionalHeaders.
 
-        let httpSession = self.task?.session as! URLSession
+        let httpSession = self.task?.session as! SSURLSession
         var httpHeaders: [AnyHashable : Any]?
 
         if let hh = httpSession.configuration.httpAdditionalHeaders {
@@ -410,7 +399,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         var timeoutInterval = Int(httpSession.configuration.timeoutIntervalForRequest) * 1000
         let requestTimeOut = request.timeoutInterval
         if !requestTimeOut.isInfinite && !requestTimeOut.isNaN && request.timeoutInterval > 0 {
-            timeoutInterval = Int(requestTimeOut) * 1000
+            timeoutInterval = Int(request.timeoutInterval) * 1000
         }
         let timeoutHandler = DispatchWorkItem { [weak self] in
             guard let self = self, let task = self.task else {
@@ -471,9 +460,9 @@ internal class _HTTPURLProtocol: _NativeProtocol {
             return
         }
 
-        guard let session = task?.session as? URLSession else { fatalError() }
+        guard let session = task?.session as? SSURLSession else { fatalError() }
 
-        if let delegate = session.delegate as? URLSessionTaskDelegate {
+        if let delegate = session.delegate as? SSURLSessionTaskDelegate {
             // At this point we need to change the internal state to note
             // that we're waiting for the delegate to call the completion
             // handler. Then we'll call the delegate callback
@@ -484,7 +473,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
             //TODO: Should the `public response: URLResponse` property be updated
             // before we call delegate API
             self.internalState = .waitingForRedirectCompletionHandler(response: response, bodyDataDrain: bodyDataDrain)
-            // We need this ugly cast in order to be able to support `URLSessionTask.init()`
+            // We need this ugly cast in order to be able to support `SSURLSessionTask.init()`
             session.delegateQueue.addOperation {
                 delegate.urlSession(session, task: self.task!, willPerformHTTPRedirection: response as! HTTPURLResponse, newRequest: request) { [weak self] (request: URLRequest?) in
                     guard let self = self else { return }
@@ -496,7 +485,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         } else {
             // Follow the redirect. Need to configure new request with cookies, etc.
             let configuredRequest = session._configuration.configure(request: request)
-            task?.knownBody = URLSessionTask._Body.none
+            task?.knownBody = SSURLSessionTask._Body.none
             startNewTransfer(with: configuredRequest)
         }
     }
@@ -609,7 +598,7 @@ extension _HTTPURLProtocol {
         // Otherwise, we'll start a new transfer with the passed in request.
         if let r = request {
             lastRedirectBody = nil
-            task?.knownBody = URLSessionTask._Body.none
+            task?.knownBody = SSURLSessionTask._Body.none
             startNewTransfer(with: r)
         } else {
             // If the redirect is not followed, return the redirect itself as the response
@@ -628,10 +617,10 @@ internal extension _HTTPURLProtocol {
     /// Whenever we receive a response (i.e. a complete header) from libcurl,
     /// this method gets called.
     func didReceiveResponse() {
-        guard let _ = task as? URLSessionDataTask else { return }
+        guard let _ = task as? SSURLSessionDataTask else { return }
         guard case .transferInProgress(let ts) = self.internalState else { fatalError("Transfer not in progress.") }
         guard let response = ts.response as? HTTPURLResponse else { fatalError("Header complete, but not URL response.") }
-        guard let session = task?.session as? URLSession else { fatalError() }
+        guard let session = task?.session as? SSURLSession else { fatalError() }
         switch session.behaviour(for: self.task!) {
         case .noDelegate:
             break

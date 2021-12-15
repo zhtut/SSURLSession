@@ -1,4 +1,4 @@
-// Foundation/URLSession/EasyHandle.swift - URLSession & libcurl
+// Foundation/SSURLSession/EasyHandle.swift - SSURLSession & libcurl
 //
 // This source file is part of the Swift.org open source project
 //
@@ -11,9 +11,9 @@
 // -----------------------------------------------------------------------------
 ///
 /// libcurl *easy handle* wrapper.
-/// These are libcurl helpers for the URLSession API code.
+/// These are libcurl helpers for the SSURLSession API code.
 /// - SeeAlso: https://curl.haxx.se/libcurl/c/
-/// - SeeAlso: URLSession.swift
+/// - SeeAlso: SSURLSession.swift
 ///
 // -----------------------------------------------------------------------------
 
@@ -50,7 +50,7 @@ import Dispatch
 /// needs to be configured for a specific transfer (e.g. the URL) will be
 /// configured on an easy handle.
 ///
-/// A single `URLSessionTask` may do multiple, consecutive transfers, and
+/// A single `SSURLSessionTask` may do multiple, consecutive transfers, and
 /// as a result it will have to reconfigure its easy handle between
 /// transfers. An easy handle can be re-used once its transfer has
 /// completed.
@@ -61,12 +61,10 @@ internal final class _EasyHandle {
     let rawHandle = CFURLSessionEasyHandleInit()
     weak var delegate: _EasyHandleDelegate?
     fileprivate var headerList: _CurlStringList?
-    fileprivate var resolveList: _CurlStringList?
-    fileprivate var connectToList: _CurlStringList?
     fileprivate var pauseState: _PauseState = []
     internal var timeoutTimer: _TimeoutSource!
     internal lazy var errorBuffer = [UInt8](repeating: 0, count: Int(CFURLSessionEasyErrorSize))
-    internal var _config: URLSession._Configuration? = nil
+    internal var _config: SSURLSession._Configuration? = nil
     internal var _url: URL? = nil
 
     init(delegate: _EasyHandleDelegate) {
@@ -130,7 +128,7 @@ extension _EasyHandle {
         try! CFURLSession_easy_setopt_long(rawHandle, CFURLSessionOptionVERBOSE, flag ? 1 : 0).asError()
     }
     /// - SeeAlso: https://curl.haxx.se/libcurl/c/CFURLSessionOptionDEBUGFUNCTION.html
-    func set(debugOutputOn flag: Bool, task: URLSessionTask) {
+    func set(debugOutputOn flag: Bool, task: SSURLSessionTask) {
         if flag {
             try! CFURLSession_easy_setopt_ptr(rawHandle, CFURLSessionOptionDEBUGDATA, UnsafeMutableRawPointer(Unmanaged.passUnretained(task).toOpaque())).asError()
             try! CFURLSession_easy_setopt_dc(rawHandle, CFURLSessionOptionDEBUGFUNCTION, printLibcurlDebug(handle:type:data:size:userInfo:)).asError()
@@ -173,21 +171,8 @@ extension _EasyHandle {
             try! CFURLSession_easy_setopt_ptr(rawHandle, CFURLSessionOptionURL, UnsafeMutablePointer(mutating: $0)).asError()
         }
     }
-    
-    func set(connectTo: String) {
-        let list = _CurlStringList([connectTo])
-        try! CFURLSession_easy_setopt_ptr(rawHandle, CFURLSessionOptionCONNECT_TO, list.asUnsafeMutablePointer).asError()
-        connectToList = list
-    }
-    
-    func set(resolve: String) {
-        let list = _CurlStringList([resolve])
-        try! CFURLSession_easy_setopt_ptr(rawHandle, CFURLSessionOptionRESOLVE, list.asUnsafeMutablePointer).asError()
-        try! CFURLSession_easy_setopt_long(rawHandle, CFURLSessionOptionIPRESOLVE, 0).asError()
-        resolveList = list
-    }
 
-    func set(sessionConfig config: URLSession._Configuration) {
+    func set(sessionConfig config: SSURLSession._Configuration) {
         _config = config
     }
 
@@ -309,12 +294,12 @@ fileprivate func printLibcurlDebug(handle: CFURLSessionEasyHandle, type: CInt, d
     }) ?? "";
 
     guard let userInfo = userInfo else { return 0 }
-    let task = Unmanaged<URLSessionTask>.fromOpaque(userInfo).takeUnretainedValue()
+    let task = Unmanaged<SSURLSessionTask>.fromOpaque(userInfo).takeUnretainedValue()
     printLibcurlDebug(type: info, data: text, task: task)
     return 0
 }
 
-fileprivate func printLibcurlDebug(type: CFURLSessionInfo, data: String, task: URLSessionTask) {
+fileprivate func printLibcurlDebug(type: CFURLSessionInfo, data: String, task: SSURLSessionTask) {
     // libcurl sends is data with trailing CRLF which inserts lots of newlines into our output.
     NSLog("[\(task.taskIdentifier)] \(type.debugHeader) \(data.mapControlToPictures)")
 }
