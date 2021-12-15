@@ -16,13 +16,15 @@ import Foundation
 @_implementationOnly import CoreFoundation
 import Dispatch
 
-internal class _SSFTPURLProtocol: _SSNativeProtocol {
+internal class _FTPURLProtocol: _NativeProtocol {
 
-    public required init(task: SSURLSessionTask, cachedResponse: SSCachedURLResponse?, client: SSURLProtocolClient?) {
+    @objc
+    public required init(task: URLSessionTask, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
         super.init(task: task, cachedResponse: cachedResponse, client: client)
     }
 
-    public required init(request: URLRequest, cachedResponse: SSCachedURLResponse?, client: SSURLProtocolClient?) {
+    @objc
+    public required init(request: URLRequest, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
         super.init(request: request, cachedResponse: cachedResponse, client: client)
     }
 
@@ -33,7 +35,7 @@ internal class _SSFTPURLProtocol: _SSNativeProtocol {
         return true
     }
 
-    override  func didReceive(headerData data: Data, contentLength: Int64) -> _SSEasyHandle._Action {
+    override  func didReceive(headerData data: Data, contentLength: Int64) -> _EasyHandle._Action {
         guard case .transferInProgress(let ts) = internalState else { fatalError("Received body data, but no transfer in progress.") }
         guard let task = task else { fatalError("Received header data but no task available.") }
         task.countOfBytesExpectedToReceive = contentLength > 0 ? contentLength : NSURLSessionTransferSizeUnknown
@@ -87,21 +89,21 @@ internal class _SSFTPURLProtocol: _SSNativeProtocol {
             self?.client?.urlProtocol(self!, didFailWithError: urlError)
         }
         guard let task = self.task else { fatalError() }
-        easyHandle.timeoutTimer = _SSTimeoutSource(queue: task.workQueue, milliseconds: Int(request.timeoutInterval) * 1000, handler: timeoutHandler)
+        easyHandle.timeoutTimer = _TimeoutSource(queue: task.workQueue, milliseconds: Int(request.timeoutInterval) * 1000, handler: timeoutHandler)
 
         easyHandle.set(automaticBodyDecompression: true)
     }
 }
 
 /// Response processing
-internal extension _SSFTPURLProtocol {
+internal extension _FTPURLProtocol {
     /// Whenever we receive a response (i.e. a complete header) from libcurl,
     /// this method gets called.
     func didReceiveResponse() {
-        guard let _ = task as? SSURLSessionDataTask else { return }
+        guard let _ = task as? URLSessionDataTask else { return }
         guard case .transferInProgress(let ts) = self.internalState else { fatalError("Transfer not in progress.") }
         guard let response = ts.response else { fatalError("Header complete, but not URL response.") }
-        guard let session = task?.session as? SSURLSession else { fatalError() }
+        guard let session = task?.session as? URLSession else { fatalError() }
         switch session.behaviour(for: self.task!) {
         case .noDelegate:
             break

@@ -1,4 +1,4 @@
-// Foundation/SSURLSession/libcurlHelpers - SSURLSession & libcurl
+// Foundation/URLSession/libcurlHelpers - URLSession & libcurl
 //
 // This source file is part of the Swift.org open source project
 //
@@ -10,9 +10,9 @@
 //
 // -----------------------------------------------------------------------------
 ///
-/// These are libcurl helpers for the SSURLSession API code.
+/// These are libcurl helpers for the URLSession API code.
 /// - SeeAlso: https://curl.haxx.se/libcurl/c/
-/// - SeeAlso: SSURLSession.swift
+/// - SeeAlso: URLSession.swift
 ///
 // -----------------------------------------------------------------------------
 

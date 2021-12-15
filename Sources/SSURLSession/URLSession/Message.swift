@@ -1,4 +1,4 @@
-// Foundation/SSURLSession/Message.swift -  Message parsing for native protocols
+// Foundation/URLSession/Message.swift -  Message parsing for native protocols
 //
 // This source file is part of the Swift.org open source project
 //
@@ -10,9 +10,9 @@
 //
 // -----------------------------------------------------------------------------
 ///
-/// These are libcurl helpers for the SSURLSession API code.
+/// These are libcurl helpers for the URLSession API code.
 /// - SeeAlso: https://curl.haxx.se/libcurl/c/
-/// - SeeAlso: SSURLSession.swift
+/// - SeeAlso: URLSession.swift
 ///
 // -----------------------------------------------------------------------------
 
@@ -22,7 +22,7 @@ import Foundation
 import Foundation
 #endif
 
-extension _SSNativeProtocol {
+extension _NativeProtocol {
     /// A native protocol like FTP or HTTP header being parsed.
     ///
     /// It can either be complete (i.e. the final CR LF CR LF has been
@@ -48,14 +48,14 @@ extension _SSNativeProtocol {
     }
 }
 
-extension _SSNativeProtocol._ParsedResponseHeader {
+extension _NativeProtocol._ParsedResponseHeader {
     /// Parse a header line passed by libcurl.
     ///
     /// These contain the <CRLF> ending and the final line contains nothing but
     /// that ending.
     /// - Returns: Returning nil indicates failure. Otherwise returns a new
     ///     `ParsedResponseHeader` with the given line added.
-    func byAppending(headerLine data: Data, onHeaderCompleted: (String) -> Bool) -> _SSNativeProtocol._ParsedResponseHeader? {
+    func byAppending(headerLine data: Data, onHeaderCompleted: (String) -> Bool) -> _NativeProtocol._ParsedResponseHeader? {
         // The buffer must end in CRLF
         guard 2 <= data.count &&
             data[data.endIndex - 2] == _Delimiters.CR &&
@@ -71,11 +71,11 @@ extension _SSNativeProtocol._ParsedResponseHeader {
     /// is a complete header. Otherwise it's a partial header.
     /// - Note: Appending a line to a complete header results in a partial
     ///     header with just that line.
-    private func _byAppending(headerLine line: String, onHeaderCompleted: (String) -> Bool) -> _SSNativeProtocol._ParsedResponseHeader {
+    private func _byAppending(headerLine line: String, onHeaderCompleted: (String) -> Bool) -> _NativeProtocol._ParsedResponseHeader {
         if onHeaderCompleted(line) {
             switch self {
             case .partial(let header): return .complete(header)
-            case .complete: return .partial(_SSNativeProtocol._ResponseHeaderLines())
+            case .complete: return .partial(_NativeProtocol._ResponseHeaderLines())
             }
         } else {
             let header = partialResponseHeader
@@ -83,20 +83,20 @@ extension _SSNativeProtocol._ParsedResponseHeader {
         }
     }
 
-    private var partialResponseHeader: _SSNativeProtocol._ResponseHeaderLines {
+    private var partialResponseHeader: _NativeProtocol._ResponseHeaderLines {
         switch self {
         case .partial(let header): return header
-        case .complete: return _SSNativeProtocol._ResponseHeaderLines()
+        case .complete: return _NativeProtocol._ResponseHeaderLines()
         }
     }
 }
 
-private extension _SSNativeProtocol._ResponseHeaderLines {
+private extension _NativeProtocol._ResponseHeaderLines {
     /// Returns a copy of the lines with the new line appended to it.
-    func byAppending(headerLine line: String) -> _SSNativeProtocol._ResponseHeaderLines {
+    func byAppending(headerLine line: String) -> _NativeProtocol._ResponseHeaderLines {
         var l = self.lines
         l.append(line)
-        return _SSNativeProtocol._ResponseHeaderLines(headerLines: l)
+        return _NativeProtocol._ResponseHeaderLines(headerLines: l)
     }
 }
 
