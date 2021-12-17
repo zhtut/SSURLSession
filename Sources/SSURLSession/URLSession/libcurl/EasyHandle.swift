@@ -61,6 +61,8 @@ internal final class _EasyHandle {
     let rawHandle = CFURLSessionEasyHandleInit()
     weak var delegate: _EasyHandleDelegate?
     fileprivate var headerList: _CurlStringList?
+    fileprivate var resolveList: _CurlStringList?
+    fileprivate var connectToList: _CurlStringList?
     fileprivate var pauseState: _PauseState = []
     internal var timeoutTimer: _TimeoutSource!
     internal lazy var errorBuffer = [UInt8](repeating: 0, count: Int(CFURLSessionEasyErrorSize))
@@ -223,6 +225,22 @@ extension _EasyHandle {
         // We need to retain the list for as long as the rawHandle is in use.
         headerList = list
     }
+    
+    func set(resolve: String) {
+        let list = _CurlStringList([resolve])
+        try! CFURLSession_easy_setopt_ptr(rawHandle, CFURLSessionOptionRESOLVE, list.asUnsafeMutablePointer).asError()
+        try! CFURLSession_easy_setopt_long(rawHandle, CFURLSessionOptionIPRESOLVE, 0).asError()
+        // We need to retain the list for as long as the rawHandle is in use.
+        resolveList = list
+    }
+    
+    func set(connectTo: String) {
+        let list = _CurlStringList([connectTo])
+        try! CFURLSession_easy_setopt_ptr(rawHandle, CFURLSessionOptionCONNECT_TO, list.asUnsafeMutablePointer).asError()
+        // We need to retain the list for as long as the rawHandle is in use.
+        connectToList = list
+    }
+    
     ///TODO: Wait for pipelining/multiplexing. Unavailable on Ubuntu 14.0
     /// - SeeAlso: https://curl.haxx.se/libcurl/c/CURLOPT_PIPEWAIT.html
     

@@ -357,8 +357,18 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         if let hh = httpSession.configuration.httpAdditionalHeaders {
             httpHeaders = hh
         }
+        
+        if let resolve = request.value(forHTTPHeaderField: "resolve") {
+            easyHandle.set(resolve: resolve)
+        }
+        
+        if let connectTo = request.value(forHTTPHeaderField: "connectTo") {
+            easyHandle.set(connectTo: connectTo)
+        }
 
-        if let hh = request.allHTTPHeaderFields {
+        if let hh = request.allHTTPHeaderFields?.filter({ (key, _) in
+            key != "resolve" && key != "connectTo"
+        }) {
             if httpHeaders == nil {
                 httpHeaders = hh
             } else {
