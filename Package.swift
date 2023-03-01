@@ -12,4 +12,5 @@ let package = Package(name: "SSURLSession",
                       ],
                       targets: [
                         .target(name: "SSURLSession", dependencies: ["CFURLSessionInterface"]),
+                        .testTarget(name: "SSURLSessionTests", dependencies: ["SSURLSession"])
                       ])
