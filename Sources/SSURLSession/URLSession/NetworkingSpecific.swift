@@ -33,11 +33,6 @@ internal func NSRequiresConcreteImplementation(_ fn: String = #function, file: S
     fatalError("\(fn) must be overridden", file: file, line: line)
 }
 
-internal protocol _NSNonfileURLContentLoading: AnyObject {
-    init()
-    func contentsOf(url: URL) throws -> (result: NSData, textEncodingNameIfAvailable: String?)
-}
-
 @usableFromInline
 class _NSNonfileURLContentLoader: _NSNonfileURLContentLoading {
     @usableFromInline
@@ -55,7 +50,7 @@ class _NSNonfileURLContentLoader: _NSNonfileURLContentLoading {
         }
 
         var urlResponse: URLResponse?
-        let session = SSURLSession(configuration: SSURLSessionConfiguration.default)
+        let session = URLSession(configuration: URLSessionConfiguration.default)
         let cond = NSCondition()
         cond.lock()
         
@@ -98,4 +93,10 @@ class _NSNonfileURLContentLoader: _NSNonfileURLContentLoading {
         }
         throw cocoaError()
     }
+}
+
+// add-
+public protocol _NSNonfileURLContentLoading: AnyObject {
+    init()
+    func contentsOf(url: URL) throws -> (result: NSData, textEncodingNameIfAvailable: String?)
 }

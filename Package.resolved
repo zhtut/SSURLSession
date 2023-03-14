@@ -6,8 +6,8 @@
         "repositoryURL": "https://github.com/zhtut/CFURLSessionInterface.git",
         "state": {
           "branch": null,
-          "revision": "415af50cf914ddb340d9e26c17e6d13d941d9cfb",
-          "version": "0.1.4"
+          "revision": "1a12fa7aface2df64b6cf366a06ba5a8ee7d9c57",
+          "version": "0.1.6"
         }
       },
       {
@@ -15,8 +15,8 @@
         "repositoryURL": "https://github.com/zhtut/curl.git",
         "state": {
           "branch": null,
-          "revision": "55c598b4c542fa39424ec5fb2fbe7327478ca9f2",
-          "version": "7.80.0"
+          "revision": "d2c5dab5053b55d11e633c28cb5240cebefd1342",
+          "version": "7.88.1"
         }
       }
     ]

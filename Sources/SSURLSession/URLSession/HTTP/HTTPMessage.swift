@@ -1,4 +1,4 @@
-// Foundation/SSURLSession/HTTPMessage.swift - HTTP Message parsing
+// Foundation/URLSession/HTTPMessage.swift - HTTP Message parsing
 //
 // This source file is part of the Swift.org open source project
 //
@@ -11,9 +11,9 @@
 // -----------------------------------------------------------------------------
 ///
 /// Helpers for parsing HTTP responses.
-/// These are libcurl helpers for the SSURLSession API code.
+/// These are libcurl helpers for the URLSession API code.
 /// - SeeAlso: https://curl.haxx.se/libcurl/c/
-/// - SeeAlso: SSURLSession.swift
+/// - SeeAlso: URLSession.swift
 ///
 // -----------------------------------------------------------------------------
 
@@ -145,12 +145,19 @@ extension _HTTPURLProtocol._HTTPMessage._Challenge {
     /// - [RFC 7235 - Hypertext Transfer Protocol (HTTP/1.1): Authentication](https://tools.ietf.org/html/rfc7235)
     /// - [RFC 7617 - The 'Basic' HTTP Authentication Scheme](https://tools.ietf.org/html/rfc7617)
     static func challenges(from response: HTTPURLResponse) -> [_HTTPURLProtocol._HTTPMessage._Challenge] {
-        // Fallback on earlier versions
-        let allHeaders = response.allHeaderFields
-        guard let authenticateValue = allHeaders["WWW-Authenticate"] as? String else {
-            return []
+        if #available(iOS 13.0, *) {
+            guard let authenticateValue = response.value(forHTTPHeaderField: "WWW-Authenticate") else {
+                return []
+            }
+            return challenges(from: authenticateValue)
+        } else {
+            // Fallback on earlier versions
+            let allHeaders = response.allHeaderFields
+            guard let authenticateValue = allHeaders["WWW-Authenticate"] as? String else {
+                return []
+            }
+            return challenges(from: authenticateValue)
         }
-        return challenges(from: authenticateValue)
     }
     /// Creates authentication challenges from provided field value.
     ///
@@ -352,7 +359,7 @@ private extension String {
 }
 
 /// Parses an array of lines into an array of
-/// `SSURLSessionTask.HTTPMessage.Header`.
+/// `URLSessionTask.HTTPMessage.Header`.
 ///
 /// This respects the header folding as described by
 /// https://tools.ietf.org/html/rfc2616#section-2.2 :

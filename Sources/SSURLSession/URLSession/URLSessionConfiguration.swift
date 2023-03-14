@@ -1,4 +1,4 @@
-// Foundation/SSURLSession/SSURLSessionConfiguration.swift - SSURLSession Configuration
+// Foundation/URLSession/URLSessionConfiguration.swift - URLSession Configuration
 //
 // This source file is part of the Swift.org open source project
 //
@@ -10,8 +10,8 @@
 //
 // -----------------------------------------------------------------------------
 ///
-/// SSURLSession API code.
-/// - SeeAlso: SSURLSession.swift
+/// URLSession API code.
+/// - SeeAlso: URLSession.swift
 ///
 // -----------------------------------------------------------------------------
 
@@ -21,7 +21,7 @@ import Foundation
 import Foundation
 #endif
 
-/// Configuration options for an SSURLSession.
+/// Configuration options for an URLSession.
 ///
 /// When a session is
 /// created, a copy of the configuration object is made - you cannot
@@ -35,25 +35,25 @@ import Foundation
 ///
 /// A background session can be used to perform networking operations
 /// on behalf of a suspended application, within certain constraints.
-open class SSURLSessionConfiguration : NSObject, NSCopying {
+open class URLSessionConfiguration : NSObject, NSCopying {
     // -init is silently incorrect in URLSessionCofiguration on the desktop. Ensure code that relied on swift-corelibs-foundation's init() being functional is redirected to the appropriate cross-platform class property.
-    @available(*, deprecated, message: "Use .default instead.", renamed: "SSURLSessionConfiguration.default")
+    @available(*, deprecated, message: "Use .default instead.", renamed: "URLSessionConfiguration.default")
     public override init() {
-        self.requestCachePolicy = SSURLSessionConfiguration.default.requestCachePolicy
-        self.timeoutIntervalForRequest = SSURLSessionConfiguration.default.timeoutIntervalForRequest
-        self.timeoutIntervalForResource = SSURLSessionConfiguration.default.timeoutIntervalForResource
-        self.networkServiceType = SSURLSessionConfiguration.default.networkServiceType
-        self.allowsCellularAccess = SSURLSessionConfiguration.default.allowsCellularAccess
-        self.isDiscretionary = SSURLSessionConfiguration.default.isDiscretionary
-        self.httpShouldUsePipelining = SSURLSessionConfiguration.default.httpShouldUsePipelining
-        self.httpShouldSetCookies = SSURLSessionConfiguration.default.httpShouldSetCookies
-        self.httpCookieAcceptPolicy = SSURLSessionConfiguration.default.httpCookieAcceptPolicy
-        self.httpMaximumConnectionsPerHost = SSURLSessionConfiguration.default.httpMaximumConnectionsPerHost
-        self.httpCookieStorage = SSURLSessionConfiguration.default.httpCookieStorage
-        self.urlCredentialStorage = SSURLSessionConfiguration.default.urlCredentialStorage
-        self.urlCache = SSURLSessionConfiguration.default.urlCache
-        self.shouldUseExtendedBackgroundIdleMode = SSURLSessionConfiguration.default.shouldUseExtendedBackgroundIdleMode
-        self.protocolClasses = SSURLSessionConfiguration.default.protocolClasses
+        self.requestCachePolicy = URLSessionConfiguration.default.requestCachePolicy
+        self.timeoutIntervalForRequest = URLSessionConfiguration.default.timeoutIntervalForRequest
+        self.timeoutIntervalForResource = URLSessionConfiguration.default.timeoutIntervalForResource
+        self.networkServiceType = URLSessionConfiguration.default.networkServiceType
+        self.allowsCellularAccess = URLSessionConfiguration.default.allowsCellularAccess
+        self.isDiscretionary = URLSessionConfiguration.default.isDiscretionary
+        self.httpShouldUsePipelining = URLSessionConfiguration.default.httpShouldUsePipelining
+        self.httpShouldSetCookies = URLSessionConfiguration.default.httpShouldSetCookies
+        self.httpCookieAcceptPolicy = URLSessionConfiguration.default.httpCookieAcceptPolicy
+        self.httpMaximumConnectionsPerHost = URLSessionConfiguration.default.httpMaximumConnectionsPerHost
+        self.httpCookieStorage = URLSessionConfiguration.default.httpCookieStorage
+        self.urlCredentialStorage = URLSessionConfiguration.default.urlCredentialStorage
+        self.urlCache = URLSessionConfiguration.default.urlCache
+        self.shouldUseExtendedBackgroundIdleMode = URLSessionConfiguration.default.shouldUseExtendedBackgroundIdleMode
+        self.protocolClasses = URLSessionConfiguration.default.protocolClasses
         super.init()
     }
     
@@ -75,7 +75,7 @@ open class SSURLSessionConfiguration : NSObject, NSCopying {
                   urlCredentialStorage: .shared,
                   urlCache: .shared,
                   shouldUseExtendedBackgroundIdleMode: false,
-                  protocolClasses: [_HTTPURLProtocol.self, _FTPURLProtocol.self])
+                  protocolClasses: [_HTTPURLProtocol.self, _FTPURLProtocol.self, _WebSocketURLProtocol.self])
     }
     
     private init(identifier: String?,
@@ -93,7 +93,7 @@ open class SSURLSessionConfiguration : NSObject, NSCopying {
                  httpMaximumConnectionsPerHost: Int,
                  httpCookieStorage: HTTPCookieStorage?,
                  urlCredentialStorage: URLCredentialStorage?,
-                 urlCache: SSURLCache?,
+                 urlCache: URLCache?,
                  shouldUseExtendedBackgroundIdleMode: Bool,
                  protocolClasses: [AnyClass]?)
     {
@@ -122,7 +122,7 @@ open class SSURLSessionConfiguration : NSObject, NSCopying {
     }
     
     open func copy(with zone: NSZone?) -> Any {
-        return SSURLSessionConfiguration(
+        return URLSessionConfiguration(
             identifier: identifier,
             requestCachePolicy: requestCachePolicy,
             timeoutIntervalForRequest: timeoutIntervalForRequest,
@@ -143,20 +143,20 @@ open class SSURLSessionConfiguration : NSObject, NSCopying {
             protocolClasses: protocolClasses)
     }
     
-    open class var `default`: SSURLSessionConfiguration {
-        return SSURLSessionConfiguration(correctly: ())
+    open class var `default`: URLSessionConfiguration {
+        return URLSessionConfiguration(correctly: ())
     }
 
-//    open class var ephemeral: SSURLSessionConfiguration {
-//        let ephemeralConfiguration = SSURLSessionConfiguration.default.copy() as! SSURLSessionConfiguration
-//        ephemeralConfiguration.httpCookieStorage = .ephemeralStorage()
-//        ephemeralConfiguration.urlCredentialStorage = URLCredentialStorage(ephemeral: true)
-//        ephemeralConfiguration.urlCache = SSURLCache(memoryCapacity: 4 * 1024 * 1024, diskCapacity: 0, diskPath: nil)
-//        return ephemeralConfiguration
-//    }
+    //open class var ephemeral: URLSessionConfiguration {
+        //let ephemeralConfiguration = URLSessionConfiguration.default.copy() as! URLSessionConfiguration
+        //ephemeralConfiguration.httpCookieStorage = .ephemeralStorage()
+        //ephemeralConfiguration.urlCredentialStorage = URLCredentialStorage(ephemeral: true)
+        //ephemeralConfiguration.urlCache = URLCache(memoryCapacity: 4 * 1024 * 1024, diskCapacity: 0, diskPath: nil)
+        //return ephemeralConfiguration
+    //}
 
     @available(*, unavailable, message: "Not available on non-Darwin platforms")
-    open class func background(withIdentifier identifier: String) -> SSURLSessionConfiguration { NSUnsupported() }
+    open class func background(withIdentifier identifier: String) -> URLSessionConfiguration { NSUnsupported() }
     
     /* identifier for the background session configuration */
     open var identifier: String?
@@ -232,20 +232,20 @@ open class SSURLSessionConfiguration : NSObject, NSCopying {
     open var urlCredentialStorage: URLCredentialStorage?
     
     /* The URL resource cache, or nil to indicate that no caching is to be performed */
-    open var urlCache: SSURLCache?
+    open var urlCache: URLCache?
     
     /* Enable extended background idle mode for any tcp sockets created.    Enabling this mode asks the system to keep the socket open
      *  and delay reclaiming it when the process moves to the background (see https://developer.apple.com/library/ios/technotes/tn2277/_index.html)
      */
     open var shouldUseExtendedBackgroundIdleMode: Bool
     
-    /* An optional array of Class objects which subclass SSURLProtocol.
+    /* An optional array of Class objects which subclass URLProtocol.
      The Class will be sent +canInitWithRequest: when determining if
      an instance of the class can be used for a given URL scheme.
-     You should not use +[SSURLProtocol registerClass:], as that
+     You should not use +[URLProtocol registerClass:], as that
      method will register your class with the default session rather
-     than with an instance of SSURLSession.
-     Custom SSURLProtocol subclasses are not available to background
+     than with an instance of URLSession.
+     Custom URLProtocol subclasses are not available to background
      sessions.
      */
      open var protocolClasses: [AnyClass]?
@@ -256,12 +256,12 @@ open class SSURLSessionConfiguration : NSObject, NSCopying {
 
      /* A service type that specifies the Multipath TCP connection policy for transmitting data over Wi-Fi and cellular interfaces*/
      @available(*, unavailable, message: "Not available on non-Darwin platforms")
-     open var multipathServiceType: SSURLSessionConfiguration.MultipathServiceType { NSUnsupported() }
+     open var multipathServiceType: URLSessionConfiguration.MultipathServiceType { NSUnsupported() }
 
 }
 
 @available(*, unavailable, message: "Not available on non-Darwin platforms")
-extension SSURLSessionConfiguration {
+extension URLSessionConfiguration {
     public enum MultipathServiceType {
         case none
         case handover

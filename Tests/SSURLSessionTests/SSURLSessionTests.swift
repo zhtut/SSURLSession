@@ -9,7 +9,7 @@ final class SSURLSessionTests: XCTestCase {
                 let urlStr = "https://www.baidu.com"
                 let url = URL(string: urlStr)!
                 let req = URLRequest(url: url)
-                let task = SSURLSession.shared.dataTask(with: req, completionHandler: { data, resp, error in
+                let task = SSURLSession.URLSession.shared.dataTask(with: req, completionHandler: { data, resp, error in
                     continuation.resume(returning: resp as? HTTPURLResponse)
                 })
                 task.resume()

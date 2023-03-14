@@ -27,11 +27,11 @@ internal class _HTTPURLProtocol: _NativeProtocol {
     var lastRedirectBody: Data? = nil
     private var redirectCount = 0
 
-    public required init(task: SSURLSessionTask, cachedResponse: SSCachedURLResponse?, client: SSURLProtocolClient?) {
+    public required init(task: URLSessionTask, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
         super.init(task: task, cachedResponse: cachedResponse, client: client)
     }
 
-    public required init(request: URLRequest, cachedResponse: SSCachedURLResponse?, client: SSURLProtocolClient?) {
+    public required init(request: URLRequest, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
         super.init(request: request, cachedResponse: cachedResponse, client: client)
     }
 
@@ -117,7 +117,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         }
     }
     
-    override func canCache(_ response: SSCachedURLResponse) -> Bool {
+    override func canCache(_ response: CachedURLResponse) -> Bool {
         guard let httpRequest = task?.currentRequest else { return false }
         guard let httpResponse = response.response as? HTTPURLResponse else { return false }
         
@@ -254,7 +254,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         return x
     }()
     
-    override func canRespondFromCache(using response: SSCachedURLResponse) -> Bool {
+    override func canRespondFromCache(using response: CachedURLResponse) -> Bool {
         // If somehow cached a response that shouldn't have been, we should remove it.
         guard canCache(response) else {
             // Calling super removes it from the cache and returns false, which is the default.
@@ -275,7 +275,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         // values.
 
         //TODO: We could add a strong reference from the easy handle back to
-        // its SSURLSessionTask by means of CURLOPT_PRIVATE -- that would ensure
+        // its URLSessionTask by means of CURLOPT_PRIVATE -- that would ensure
         // that the task is always around while the handle is running.
         // We would have to break that retain cycle once the handle completes
         // its transfer.
@@ -312,7 +312,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
             fatalError("No URL in request.")
         }
         easyHandle.set(url: url)
-        let session = task?.session as! SSURLSession
+        let session = task?.session as! URLSession
         let _config = session._configuration
         easyHandle.set(sessionConfig: _config)
         easyHandle.setAllowedProtocolsToHTTPAndHTTPS()
@@ -351,13 +351,13 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         // httpAdditionalHeaders from session configuration first and then append/update the
         // request.allHTTPHeaders so that request.allHTTPHeaders can override httpAdditionalHeaders.
 
-        let httpSession = self.task?.session as! SSURLSession
+        let httpSession = self.task?.session as! URLSession
         var httpHeaders: [AnyHashable : Any]?
 
         if let hh = httpSession.configuration.httpAdditionalHeaders {
             httpHeaders = hh
         }
-        
+
         if let resolve = request.value(forHTTPHeaderField: "resolve") {
             easyHandle.set(resolve: resolve)
         }
@@ -365,7 +365,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         if let connectTo = request.value(forHTTPHeaderField: "connectTo") {
             easyHandle.set(connectTo: connectTo)
         }
-
+        
         if let hh = request.allHTTPHeaderFields?.filter({ (key, _) in
             key != "resolve" && key != "connectTo"
         }) {
@@ -408,7 +408,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
 
         var timeoutInterval = Int(httpSession.configuration.timeoutIntervalForRequest) * 1000
         let requestTimeOut = request.timeoutInterval
-        if !requestTimeOut.isInfinite && !requestTimeOut.isNaN && request.timeoutInterval > 0 {
+        if !requestTimeOut.isInfinite && !requestTimeOut.isNaN && requestTimeOut > 0 {
             timeoutInterval = Int(request.timeoutInterval) * 1000
         }
         let timeoutHandler = DispatchWorkItem { [weak self] in
@@ -470,9 +470,9 @@ internal class _HTTPURLProtocol: _NativeProtocol {
             return
         }
 
-        guard let session = task?.session as? SSURLSession else { fatalError() }
+        guard let session = task?.session as? URLSession else { fatalError() }
 
-        if let delegate = session.delegate as? SSURLSessionTaskDelegate {
+        if let delegate = session.delegate as? URLSessionTaskDelegate {
             // At this point we need to change the internal state to note
             // that we're waiting for the delegate to call the completion
             // handler. Then we'll call the delegate callback
@@ -483,7 +483,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
             //TODO: Should the `public response: URLResponse` property be updated
             // before we call delegate API
             self.internalState = .waitingForRedirectCompletionHandler(response: response, bodyDataDrain: bodyDataDrain)
-            // We need this ugly cast in order to be able to support `SSURLSessionTask.init()`
+            // We need this ugly cast in order to be able to support `URLSessionTask.init()`
             session.delegateQueue.addOperation {
                 delegate.urlSession(session, task: self.task!, willPerformHTTPRedirection: response as! HTTPURLResponse, newRequest: request) { [weak self] (request: URLRequest?) in
                     guard let self = self else { return }
@@ -495,7 +495,7 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         } else {
             // Follow the redirect. Need to configure new request with cookies, etc.
             let configuredRequest = session._configuration.configure(request: request)
-            task?.knownBody = SSURLSessionTask._Body.none
+            task?.knownBody = URLSessionTask._Body.none
             startNewTransfer(with: configuredRequest)
         }
     }
@@ -510,9 +510,106 @@ internal class _HTTPURLProtocol: _NativeProtocol {
         }
         return nil
     }
-}
+    
+    /// Whenever we receive a response (i.e. a complete header) from libcurl,
+    /// this method gets called.
+    func didReceiveResponse() {
+        guard let _ = task as? URLSessionDataTask else { return }
+        guard case .transferInProgress(let ts) = self.internalState else { fatalError("Transfer not in progress.") }
+        guard let response = ts.response as? HTTPURLResponse else { fatalError("Header complete, but not URL response.") }
+        guard let session = task?.session as? URLSession else { fatalError() }
+        switch session.behaviour(for: self.task!) {
+        case .noDelegate:
+            break
+        case .taskDelegate:
+            //TODO: There's a problem with libcurl / with how we're using it.
+            // We're currently unable to pause the transfer / the easy handle:
+            // https://curl.haxx.se/mail/lib-2016-03/0222.html
+            //
+            // For now, we'll notify the delegate, but won't pause the transfer,
+            // and we'll disregard the completion handler:
+            switch response.statusCode {
+            case 301, 302, 303, 305...308:
+                break
+            default:
+                self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            }
+        case .dataCompletionHandler:
+            break
+        case .downloadCompletionHandler:
+            break
+        }
+    }
 
-fileprivate extension _HTTPURLProtocol {
+    /// If the response is a redirect, return the new request
+    ///
+    /// RFC 7231 section 6.4 defines redirection behavior for HTTP/1.1
+    ///
+    /// - SeeAlso: <https://tools.ietf.org/html/rfc7231#section-6.4>
+    func redirectRequest(for response: HTTPURLResponse, fromRequest: URLRequest) -> URLRequest? {
+        //TODO: Do we ever want to redirect for HEAD requests?
+        
+        guard
+            let location = response.value(forHeaderField: .location),
+            let targetURL = URL(string: location)
+            else {
+                // Can't redirect when there's no location to redirect to.
+                return nil
+        }
+        
+        var request = fromRequest
+        
+        // Check for a redirect:
+        switch response.statusCode {
+            case 301...302 where request.httpMethod == "POST", 303:
+                // Change "POST" into "GET" but leave other methods unchanged:
+                request.httpMethod = "GET"
+                request.httpBody = nil
+
+            case 301...302, 305...308:
+                // Re-use existing method:
+                break
+
+            default:
+                return nil
+        }
+
+        // If targetURL has only relative path of url, create a new valid url with relative path
+        // Otherwise, return request with targetURL ie.url from location field
+        guard targetURL.scheme == nil || targetURL.host == nil else {
+            request.url = targetURL
+            return request
+        }
+
+        guard
+            let fromUrl = fromRequest.url,
+            var components = URLComponents(url: fromUrl, resolvingAgainstBaseURL: false)
+            else { return nil }
+
+        // If the new URL contains a host, use the host and port from the new URL.
+        // Otherwise, the host and port from the original URL are used.
+        if targetURL.host != nil {
+            components.host = targetURL.host
+            components.port = targetURL.port
+        }
+        
+        // The path must either begin with "/" or be an empty string.
+        if targetURL.path.hasPrefix("/") {
+            components.path = targetURL.path
+        } else {
+            components.path = "/" + targetURL.path
+        }
+        
+        // The query and fragment components are set separately to prevent them from being
+        // percent encoded again.
+        components.percentEncodedQuery = targetURL.query
+        components.percentEncodedFragment = targetURL.fragment
+
+        guard let url = components.url else { fatalError("Invalid URL") }
+        request.url = url
+
+        return request
+    }
 
     /// These are a list of headers that should be passed to libcurl.
     ///
@@ -608,7 +705,7 @@ extension _HTTPURLProtocol {
         // Otherwise, we'll start a new transfer with the passed in request.
         if let r = request {
             lastRedirectBody = nil
-            task?.knownBody = SSURLSessionTask._Body.none
+            task?.knownBody = URLSessionTask._Body.none
             startNewTransfer(with: r)
         } else {
             // If the redirect is not followed, return the redirect itself as the response
@@ -619,109 +716,6 @@ extension _HTTPURLProtocol {
             self.internalState = .transferCompleted(response: response, bodyDataDrain: bodyDataDrain)
             completeTask()
         }
-    }
-}
-
-/// Response processing
-internal extension _HTTPURLProtocol {
-    /// Whenever we receive a response (i.e. a complete header) from libcurl,
-    /// this method gets called.
-    func didReceiveResponse() {
-        guard let _ = task as? SSURLSessionDataTask else { return }
-        guard case .transferInProgress(let ts) = self.internalState else { fatalError("Transfer not in progress.") }
-        guard let response = ts.response as? HTTPURLResponse else { fatalError("Header complete, but not URL response.") }
-        guard let session = task?.session as? SSURLSession else { fatalError() }
-        switch session.behaviour(for: self.task!) {
-        case .noDelegate:
-            break
-        case .taskDelegate:
-            //TODO: There's a problem with libcurl / with how we're using it.
-            // We're currently unable to pause the transfer / the easy handle:
-            // https://curl.haxx.se/mail/lib-2016-03/0222.html
-            //
-            // For now, we'll notify the delegate, but won't pause the transfer,
-            // and we'll disregard the completion handler:
-            switch response.statusCode {
-            case 301, 302, 303, 305...308:
-                break
-            default:
-                self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            }
-        case .dataCompletionHandler:
-            break
-        case .downloadCompletionHandler:
-            break
-        }
-    }
-
-    /// If the response is a redirect, return the new request
-    ///
-    /// RFC 7231 section 6.4 defines redirection behavior for HTTP/1.1
-    ///
-    /// - SeeAlso: <https://tools.ietf.org/html/rfc7231#section-6.4>
-    func redirectRequest(for response: HTTPURLResponse, fromRequest: URLRequest) -> URLRequest? {
-        //TODO: Do we ever want to redirect for HEAD requests?
-        
-        guard
-            let location = response.value(forHeaderField: .location),
-            let targetURL = URL(string: location)
-            else {
-                // Can't redirect when there's no location to redirect to.
-                return nil
-        }
-        
-        var request = fromRequest
-        
-        // Check for a redirect:
-        switch response.statusCode {
-            case 301...302 where request.httpMethod == "POST", 303:
-                // Change "POST" into "GET" but leave other methods unchanged:
-                request.httpMethod = "GET"
-                request.httpBody = nil
-
-            case 301...302, 305...308:
-                // Re-use existing method:
-                break
-
-            default:
-                return nil
-        }
-
-        // If targetURL has only relative path of url, create a new valid url with relative path
-        // Otherwise, return request with targetURL ie.url from location field
-        guard targetURL.scheme == nil || targetURL.host == nil else {
-            request.url = targetURL
-            return request
-        }
-
-        guard
-            let fromUrl = fromRequest.url,
-            var components = URLComponents(url: fromUrl, resolvingAgainstBaseURL: false)
-            else { return nil }
-
-        // If the new URL contains a host, use the host and port from the new URL.
-        // Otherwise, the host and port from the original URL are used.
-        if targetURL.host != nil {
-            components.host = targetURL.host
-            components.port = targetURL.port
-        }
-        
-        // The path must either begin with "/" or be an empty string.
-        if targetURL.path.hasPrefix("/") {
-            components.path = targetURL.path
-        } else {
-            components.path = "/" + targetURL.path
-        }
-        
-        // The query and fragment components are set separately to prevent them from being
-        // percent encoded again.
-        components.percentEncodedQuery = targetURL.query
-        components.percentEncodedFragment = targetURL.fragment
-
-        guard let url = components.url else { fatalError("Invalid URL") }
-        request.url = url
-
-        return request
     }
 }
 

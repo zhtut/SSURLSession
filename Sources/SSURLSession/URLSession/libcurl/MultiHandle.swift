@@ -10,9 +10,9 @@
 // -----------------------------------------------------------------------------
 ///
 /// libcurl *multi handle* wrapper.
-/// These are libcurl helpers for the SSURLSession API code.
+/// These are libcurl helpers for the URLSession API code.
 /// - SeeAlso: https://curl.haxx.se/libcurl/c/
-/// - SeeAlso: SSURLSession.swift
+/// - SeeAlso: URLSession.swift
 ///
 // -----------------------------------------------------------------------------
 
@@ -28,7 +28,7 @@ import Dispatch
 
 
 
-extension SSURLSession {
+extension URLSession {
     /// Minimal wrapper around [curl multi interface](https://curl.haxx.se/libcurl/c/libcurl-multi.html).
     ///
     /// The the *multi handle* manages the sockets for easy handles
@@ -48,7 +48,7 @@ extension SSURLSession {
         fileprivate var timeoutSource: _TimeoutSource? = nil
         private var reentrantInUpdateTimeoutTimer = false
         
-        init(configuration: SSURLSession._Configuration, workQueue: DispatchQueue) {
+        init(configuration: URLSession._Configuration, workQueue: DispatchQueue) {
             queue = DispatchQueue(label: "MultiHandle.isolation", target: workQueue)
             setupCallbacks()
             configure(with: configuration)
@@ -63,8 +63,8 @@ extension SSURLSession {
     }
 }
 
-extension SSURLSession._MultiHandle {
-    func configure(with configuration: SSURLSession._Configuration) {
+extension URLSession._MultiHandle {
+    func configure(with configuration: URLSession._Configuration) {
         #if !NS_CURL_MISSING_MAX_HOST_CONNECTIONS
         try! CFURLSession_multi_setopt_l(rawHandle, CFURLSessionMultiOptionMAX_HOST_CONNECTIONS, numericCast(configuration.httpMaximumConnectionsPerHost)).asError()
         #endif
@@ -76,20 +76,20 @@ extension SSURLSession._MultiHandle {
     }
 }
 
-fileprivate extension SSURLSession._MultiHandle {
-    static func from(callbackUserData userdata: UnsafeMutableRawPointer?) -> SSURLSession._MultiHandle? {
+fileprivate extension URLSession._MultiHandle {
+    static func from(callbackUserData userdata: UnsafeMutableRawPointer?) -> URLSession._MultiHandle? {
         guard let userdata = userdata else { return nil }
-        return Unmanaged<SSURLSession._MultiHandle>.fromOpaque(userdata).takeUnretainedValue()
+        return Unmanaged<URLSession._MultiHandle>.fromOpaque(userdata).takeUnretainedValue()
     }
 }
 
-fileprivate extension SSURLSession._MultiHandle {
+fileprivate extension URLSession._MultiHandle {
     /// Forward the libcurl callbacks into Swift methods
     func setupCallbacks() {
         // Socket
         try! CFURLSession_multi_setopt_ptr(rawHandle, CFURLSessionMultiOptionSOCKETDATA, UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())).asError()
         try! CFURLSession_multi_setopt_sf(rawHandle, CFURLSessionMultiOptionSOCKETFUNCTION) { (easyHandle: CFURLSessionEasyHandle, socket: CFURLSession_socket_t, what: Int32, userdata: UnsafeMutableRawPointer?, socketptr: UnsafeMutableRawPointer?) -> Int32 in
-            guard let handle = SSURLSession._MultiHandle.from(callbackUserData: userdata) else { fatalError() }
+            guard let handle = URLSession._MultiHandle.from(callbackUserData: userdata) else { fatalError() }
             return handle.register(socket: socket, for: easyHandle, what: what, socketSourcePtr: socketptr)
             }.asError()
         // Timeout:
@@ -100,7 +100,7 @@ fileprivate extension SSURLSession._MultiHandle {
         typealias CFURLSessionMultiOption = Int
 #endif
         try! CFURLSession_multi_setopt_tf(rawHandle, CFURLSessionMultiOptionTIMERFUNCTION) { (_, timeout: CFURLSessionMultiOption, userdata: UnsafeMutableRawPointer?) -> Int32 in
-            guard let handle = SSURLSession._MultiHandle.from(callbackUserData: userdata) else { fatalError() }
+            guard let handle = URLSession._MultiHandle.from(callbackUserData: userdata) else { fatalError() }
             handle.updateTimeoutTimer(to: numericCast(timeout))
             return 0
             }.asError()
@@ -161,7 +161,7 @@ extension Collection where Element == _EasyHandle {
   }
 }
 
-internal extension SSURLSession._MultiHandle {
+internal extension URLSession._MultiHandle {
     /// Add an easy handle -- start its transfer.
     func add(_ handle: _EasyHandle) {
         // If this is the first handle being added, we need to `kick` the
@@ -187,7 +187,7 @@ internal extension SSURLSession._MultiHandle {
     }
 }
 
-fileprivate extension SSURLSession._MultiHandle {
+fileprivate extension URLSession._MultiHandle {
     /// This gets called when we should ask curl to perform action on a socket.
     func performAction(for socket: CFURLSession_socket_t) {
         try! readAndWriteAvailableData(on: socket)
@@ -295,7 +295,7 @@ internal func ~=(lhs: CFURLSessionPoll, rhs: CFURLSessionPoll) -> Bool {
     return lhs == rhs
 }
 
-fileprivate extension SSURLSession._MultiHandle._SocketRegisterAction {
+fileprivate extension URLSession._MultiHandle._SocketRegisterAction {
     init(rawValue: CFURLSessionPoll) {
         switch rawValue {
         case CFURLSessionPollNone:
@@ -314,7 +314,7 @@ fileprivate extension SSURLSession._MultiHandle._SocketRegisterAction {
     }
 }
 
-fileprivate extension SSURLSession._MultiHandle._SocketRegisterAction {
+fileprivate extension URLSession._MultiHandle._SocketRegisterAction {
     /// Should a libdispatch source be registered for **read** readiness?
     var needsReadSource: Bool {
         switch self {
@@ -344,7 +344,7 @@ fileprivate extension SSURLSession._MultiHandle._SocketRegisterAction {
 
 /// A helper class that wraps a libdispatch timer.
 ///
-/// Used to implement the timeout of `SSURLSession.MultiHandle` and `SSURLSession.EasyHandle`
+/// Used to implement the timeout of `URLSession.MultiHandle` and `URLSession.EasyHandle`
 class _TimeoutSource {
     let rawSource: DispatchSource 
     let milliseconds: Int
@@ -368,7 +368,7 @@ class _TimeoutSource {
     }
 }
 
-fileprivate extension SSURLSession._MultiHandle {
+fileprivate extension URLSession._MultiHandle {
 
     /// <https://curl.haxx.se/libcurl/c/CURLMOPT_TIMERFUNCTION.html>
     func updateTimeoutTimer(to value: Int) {
@@ -400,7 +400,7 @@ fileprivate extension SSURLSession._MultiHandle {
     }
 }
 
-fileprivate extension SSURLSession._MultiHandle._Timeout {
+fileprivate extension URLSession._MultiHandle._Timeout {
     init(timeout: Int) {
         switch timeout {
         case -1:
@@ -420,7 +420,7 @@ fileprivate extension SSURLSession._MultiHandle._Timeout {
 ///
 /// This info is stored into the socket using `curl_multi_assign()`.
 ///
-/// - SeeAlso: SSURLSession.MultiHandle.SocketRegisterAction
+/// - SeeAlso: URLSession.MultiHandle.SocketRegisterAction
 fileprivate class _SocketSources {
     var readSource: DispatchSource?
     var writeSource: DispatchSource?
@@ -462,7 +462,7 @@ fileprivate class _SocketSources {
 }
 extension _SocketSources {
     /// Create a read and/or write source as specified by the action.
-    func createSources(with action: SSURLSession._MultiHandle._SocketRegisterAction, socket: CFURLSession_socket_t, queue: DispatchQueue, handler: DispatchWorkItem) {
+    func createSources(with action: URLSession._MultiHandle._SocketRegisterAction, socket: CFURLSession_socket_t, queue: DispatchQueue, handler: DispatchWorkItem) {
         if action.needsReadSource {
             createReadSource(socket: socket, queue: queue, handler: handler)
         }

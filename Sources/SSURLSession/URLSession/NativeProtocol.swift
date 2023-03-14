@@ -1,4 +1,4 @@
-// Foundation/SSURLSession/NativeProtocol.swift - NSURLSession & libcurl
+// Foundation/URLSession/NativeProtocol.swift - NSURLSession & libcurl
 //
 // This source file is part of the Swift.org open source project
 //
@@ -11,7 +11,7 @@
 // -----------------------------------------------------------------------------
 ///
 /// This file has the common implementation of Native protocols like HTTP,FTP,Data
-/// These are libcurl helpers for the SSURLSession API code.
+/// These are libcurl helpers for the URLSession API code.
 /// - SeeAlso: https://curl.haxx.se/libcurl/c/
 /// - SeeAlso: NSURLSession.swift
 ///
@@ -33,7 +33,7 @@ internal let enableDebugOutput: Bool = {
     return ProcessInfo.processInfo.environment["URLSessionDebug"] != nil
 }()
 
-internal class _NativeProtocol: SSURLProtocol, _EasyHandleDelegate {
+internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
     internal var easyHandle: _EasyHandle!
     internal lazy var tempFileURL: URL = {
         let fileName = NSTemporaryDirectory() + NSUUID().uuidString + ".tmp"
@@ -41,14 +41,14 @@ internal class _NativeProtocol: SSURLProtocol, _EasyHandleDelegate {
         return URL(fileURLWithPath: fileName)
     }()
 
-    public required init(task: SSURLSessionTask, cachedResponse: SSCachedURLResponse?, client: SSURLProtocolClient?) {
+    public required init(task: URLSessionTask, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
         self.internalState = .initial
         super.init(request: task.originalRequest!, cachedResponse: cachedResponse, client: client)
         self.task = task
         self.easyHandle = _EasyHandle(delegate: self)
     }
 
-    public required init(request: URLRequest, cachedResponse: SSCachedURLResponse?, client: SSURLProtocolClient?) {
+    public required init(request: URLRequest, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
         self.internalState = .initial
         super.init(request: request, cachedResponse: cachedResponse, client: client)
         self.easyHandle = _EasyHandle(delegate: self)
@@ -133,19 +133,19 @@ internal class _NativeProtocol: SSURLProtocol, _EasyHandleDelegate {
             fatalError("Cannot notify")
         }
         if case .taskDelegate(let delegate) = t.session.behaviour(for: self.task!),
-            let dataDelegate = delegate as? SSURLSessionDataDelegate,
-            let task = self.task as? SSURLSessionDataTask {
+            let dataDelegate = delegate as? URLSessionDataDelegate,
+            let task = self.task as? URLSessionDataTask {
             // Forward to the delegate:
-            guard let s = self.task?.session as? SSURLSession else {
+            guard let s = self.task?.session as? URLSession else {
                 fatalError()
             }
             s.delegateQueue.addOperation {
                 dataDelegate.urlSession(s, dataTask: task, didReceive: data)
             }
         } else if case .taskDelegate(let delegate) = t.session.behaviour(for: self.task!),
-            let downloadDelegate = delegate as? SSURLSessionDownloadDelegate,
-            let task = self.task as? SSURLSessionDownloadTask {
-            guard let s = self.task?.session as? SSURLSession else {
+            let downloadDelegate = delegate as? URLSessionDownloadDelegate,
+            let task = self.task as? URLSessionDownloadTask {
+            guard let s = self.task?.session as? URLSession else {
                 fatalError()
             }
             let fileHandle = try! FileHandle(forWritingTo: self.tempFileURL)
@@ -160,7 +160,7 @@ internal class _NativeProtocol: SSURLProtocol, _EasyHandleDelegate {
     }
 
     fileprivate func notifyDelegate(aboutUploadedData count: Int64) {
-        guard let task = self.task, let session = task.session as? SSURLSession,
+        guard let task = self.task, let session = task.session as? URLSession,
             case .taskDelegate(let delegate) = session.behaviour(for: task) else { return }
         task.countOfBytesSent += count
         session.delegateQueue.addOperation {
@@ -265,7 +265,7 @@ internal class _NativeProtocol: SSURLProtocol, _EasyHandleDelegate {
         } else if case .toFile(let url, let fileHandle?) = bodyDataDrain {
             self.properties[.temporaryFileURL] = url
             fileHandle.closeFile()
-        } else if task is SSURLSessionDownloadTask {
+        } else if task is URLSessionDownloadTask {
             let fileHandle = try! FileHandle(forWritingTo: self.tempFileURL)
             fileHandle.closeFile()
             self.properties[.temporaryFileURL] = self.tempFileURL
@@ -280,11 +280,11 @@ internal class _NativeProtocol: SSURLProtocol, _EasyHandleDelegate {
 
     func seekInputStream(to position: UInt64) throws {
         // We will reset the body source and seek forward.
-        guard let session = task?.session as? SSURLSession else { fatalError() }
+        guard let session = task?.session as? URLSession else { fatalError() }
         
         var currentInputStream: InputStream?
         
-        if let delegate = session.delegate as? SSURLSessionTaskDelegate {
+        if let delegate = session.delegate as? URLSessionTaskDelegate {
             let dispatchGroup = DispatchGroup()
             dispatchGroup.enter()
             
@@ -330,7 +330,7 @@ internal class _NativeProtocol: SSURLProtocol, _EasyHandleDelegate {
         guard let task = task else {
             fatalError()
         }
-        let s = task.session as! SSURLSession
+        let s = task.session as! URLSession
         switch s.behaviour(for: task) {
         case .noDelegate:
             return .ignore
@@ -418,14 +418,14 @@ internal class _NativeProtocol: SSURLProtocol, _EasyHandleDelegate {
         }
     }
     
-    func canCache(_ response: SSCachedURLResponse) -> Bool {
+    func canCache(_ response: CachedURLResponse) -> Bool {
         return false
     }
     
     /// Allows a native protocol to process a cached response. If `true` is returned, the protocol will replay the cached response instead of starting a new transfer. The default implementation invalidates the response in the cache and returns `false`.
-    func canRespondFromCache(using response: SSCachedURLResponse) -> Bool {
+    func canRespondFromCache(using response: CachedURLResponse) -> Bool {
         // By default, native protocols do not cache. Aggressively remove unexpected cached responses.
-        if let cache = task?.session.configuration.urlCache, let task = task as? SSURLSessionDataTask {
+        if let cache = task?.session.configuration.urlCache, let task = task as? URLSessionDataTask {
             cache.removeCachedResponse(for: task)
         }
         return false
@@ -479,7 +479,7 @@ extension _NativeProtocol {
     /// response / complete header.
     ///
     /// This will pause the transfer.
-    func askDelegateHowToProceedAfterCompleteResponse(_ response: URLResponse, delegate: SSURLSessionDataDelegate) {
+    func askDelegateHowToProceedAfterCompleteResponse(_ response: URLResponse, delegate: URLSessionDataDelegate) {
         // Ask the delegate how to proceed.
         // This will pause the easy handle. We need to wait for the
         // delegate before processing any more data.
@@ -488,10 +488,10 @@ extension _NativeProtocol {
         }
         self.internalState = .waitingForResponseCompletionHandler(ts)
 
-        let dt = task as! SSURLSessionDataTask
+        let dt = task as! URLSessionDataTask
 
-        // We need this ugly cast in order to be able to support `SSURLSessionTask.init()`
-        guard let s = task?.session as? SSURLSession else {
+        // We need this ugly cast in order to be able to support `URLSessionTask.init()`
+        guard let s = task?.session as? URLSession else {
             fatalError()
         }
         s.delegateQueue.addOperation {
@@ -506,7 +506,7 @@ extension _NativeProtocol {
 
     /// This gets called (indirectly) when the data task delegates lets us know
     /// how we should proceed after receiving a response (i.e. complete header).
-    func didCompleteResponseCallback(disposition: SSURLSession.ResponseDisposition) {
+    func didCompleteResponseCallback(disposition: URLSession.ResponseDisposition) {
         guard case .waitingForResponseCompletionHandler(let ts) = self.internalState else {
             fatalError("Received response disposition, but we're not waiting for it.")
         }
@@ -534,7 +534,7 @@ extension _NativeProtocol {
         /// Task has been created, but nothing has been done, yet
         case initial
         /// The task is being fulfilled from the cache rather than the network.
-        case fulfillingFromCache(SSCachedURLResponse)
+        case fulfillingFromCache(CachedURLResponse)
         /// The easy handle has been fully configured. But it is not added to
         /// the multi handle.
         case transferReady(_TransferState)
@@ -634,7 +634,7 @@ extension _NativeProtocol._ResponseHeaderLines {
 }
 
 internal extension _NativeProtocol {
-    typealias _Body = SSURLSessionTask._Body
+    typealias _Body = URLSessionTask._Body
 }
 
 extension _NativeProtocol {
@@ -664,13 +664,14 @@ extension _NativeProtocol {
     }
 }
 
-extension SSURLSession {
+extension URLSession {
     static func printDebug(_ text: @autoclosure () -> String) {
         guard enableDebugOutput else { return }
         debugPrint(text())
     }
 }
 
+// add-
 public struct _InputStreamSPIForFoundationNetworkingUseOnly {
     var inputStream: InputStream
     
@@ -723,3 +724,4 @@ extension InputStream {
         }
     }
 }
+        

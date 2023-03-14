@@ -14,21 +14,21 @@ import Foundation
 #endif
 
 /*!
-    @header SSURLProtocol.h
+    @header URLProtocol.h
 
     This header file describes the constructs used to represent URL
     protocols, and describes the extensible system by which specific
     classes can be made to handle the loading of particular URL types or
     schemes.
     
-    <p>SSURLProtocol is an abstract class which provides the
+    <p>URLProtocol is an abstract class which provides the
     basic structure for performing protocol-specific loading of URL
     data.
     
-    <p>The SSURLProtocolClient describes the integration points a
+    <p>The URLProtocolClient describes the integration points a
     protocol implementation can use to hook into the URL loading system.
-    SSURLProtocolClient describes the methods a protocol implementation
-    needs to drive the URL loading system from a SSURLProtocol subclass.
+    URLProtocolClient describes the methods a protocol implementation
+    needs to drive the URL loading system from a URLProtocol subclass.
     
     <p>To support customization of protocol-specific requests,
     protocol implementors are encouraged to provide categories on
@@ -38,7 +38,7 @@ import Foundation
     protocol-specific request data by using the
     <tt>+propertyForKey:inRequest:</tt> and
     <tt>+setProperty:forKey:inRequest:</tt> class methods on
-    SSURLProtocol. See the NSHTTPURLRequest on NSURLRequest and
+    URLProtocol. See the NSHTTPURLRequest on NSURLRequest and
     NSMutableHTTPURLRequest on NSMutableURLRequest for examples of
     such extensions.
     
@@ -49,85 +49,85 @@ import Foundation
 */
 
 /*!
-@protocol SSURLProtocolClient
-@discussion SSURLProtocolClient provides the interface to the URL
-loading system that is intended for use by SSURLProtocol
+@protocol URLProtocolClient
+@discussion URLProtocolClient provides the interface to the URL
+loading system that is intended for use by URLProtocol
 implementors.
 */
-public protocol SSURLProtocolClient : NSObjectProtocol {
+public protocol URLProtocolClient : NSObjectProtocol {
     
     
     /*!
-     @method SSURLProtocol:wasRedirectedToRequest:
-     @abstract Indicates to an SSURLProtocolClient that a redirect has
+     @method URLProtocol:wasRedirectedToRequest:
+     @abstract Indicates to an URLProtocolClient that a redirect has
      occurred.
-     @param SSURLProtocol the SSURLProtocol object sending the message.
+     @param URLProtocol the URLProtocol object sending the message.
      @param request the NSURLRequest to which the protocol implementation
      has redirected.
      */
-    func urlProtocol(_ protocol: SSURLProtocol, wasRedirectedTo request: URLRequest, redirectResponse: URLResponse)
+    func urlProtocol(_ protocol: URLProtocol, wasRedirectedTo request: URLRequest, redirectResponse: URLResponse)
     
     
     /*!
-     @method SSURLProtocol:cachedResponseIsValid:
-     @abstract Indicates to an SSURLProtocolClient that the protocol
+     @method URLProtocol:cachedResponseIsValid:
+     @abstract Indicates to an URLProtocolClient that the protocol
      implementation has examined a cached response and has
      determined that it is valid.
-     @param SSURLProtocol the SSURLProtocol object sending the message.
+     @param URLProtocol the URLProtocol object sending the message.
      @param cachedResponse the NSCachedURLResponse object that has
      examined and is valid.
      */
-    func urlProtocol(_ protocol: SSURLProtocol, cachedResponseIsValid cachedResponse: SSCachedURLResponse)
+    func urlProtocol(_ protocol: URLProtocol, cachedResponseIsValid cachedResponse: CachedURLResponse)
     
     
     /*!
-     @method SSURLProtocol:didReceiveResponse:
-     @abstract Indicates to an SSURLProtocolClient that the protocol
+     @method URLProtocol:didReceiveResponse:
+     @abstract Indicates to an URLProtocolClient that the protocol
      implementation has created an URLResponse for the current load.
-     @param SSURLProtocol the SSURLProtocol object sending the message.
+     @param URLProtocol the URLProtocol object sending the message.
      @param response the URLResponse object the protocol implementation
      has created.
-     @param cacheStoragePolicy The SSURLCache.StoragePolicy the protocol
+     @param cacheStoragePolicy The URLCache.StoragePolicy the protocol
      has determined should be used for the given response if the
      response is to be stored in a cache.
      */
-    func urlProtocol(_ protocol: SSURLProtocol, didReceive response: URLResponse, cacheStoragePolicy policy: SSURLCache.StoragePolicy)
+    func urlProtocol(_ protocol: URLProtocol, didReceive response: URLResponse, cacheStoragePolicy policy: URLCache.StoragePolicy)
     
     
     /*!
-     @method SSURLProtocol:didLoadData:
+     @method URLProtocol:didLoadData:
      @abstract Indicates to an NSURLProtocolClient that the protocol
      implementation has loaded URL data.
      @discussion The data object must contain only new data loaded since
      the previous call to this method (if any), not cumulative data for
      the entire load.
-     @param SSURLProtocol the NSURLProtocol object sending the message.
+     @param URLProtocol the NSURLProtocol object sending the message.
      @param data URL load data being made available.
      */
-    func urlProtocol(_ protocol: SSURLProtocol, didLoad data: Data)
+    func urlProtocol(_ protocol: URLProtocol, didLoad data: Data)
     
     
     /*!
      @method URLProtocolDidFinishLoading:
      @abstract Indicates to an NSURLProtocolClient that the protocol
      implementation has finished loading successfully.
-     @param SSURLProtocol the NSURLProtocol object sending the message.
+     @param URLProtocol the NSURLProtocol object sending the message.
      */
-    func urlProtocolDidFinishLoading(_ protocol: SSURLProtocol)
+    func urlProtocolDidFinishLoading(_ protocol: URLProtocol)
     
     
     /*!
-     @method SSURLProtocol:didFailWithError:
+     @method URLProtocol:didFailWithError:
      @abstract Indicates to an NSURLProtocolClient that the protocol
      implementation has failed to load successfully.
-     @param SSURLProtocol the NSURLProtocol object sending the message.
+     @param URLProtocol the NSURLProtocol object sending the message.
      @param error The error that caused the load to fail.
      */
-    func urlProtocol(_ protocol: SSURLProtocol, didFailWithError error: Error)
+    func urlProtocol(_ protocol: URLProtocol, didFailWithError error: Error)
     
     
     /*!
-     @method SSURLProtocol:didReceiveAuthenticationChallenge:
+     @method URLProtocol:didReceiveAuthenticationChallenge:
      @abstract Start authentication for the specified request
      @param protocol The protocol object requesting authentication.
      @param challenge The authentication challenge.
@@ -136,20 +136,20 @@ public protocol SSURLProtocolClient : NSObjectProtocol {
      default credential to the challenge it issues to the connection delegate,
      if the protocol did not provide one.
      */
-    func urlProtocol(_ protocol: SSURLProtocol, didReceive challenge: URLAuthenticationChallenge)
+    func urlProtocol(_ protocol: URLProtocol, didReceive challenge: URLAuthenticationChallenge)
     
     
     /*!
-     @method SSURLProtocol:didCancelAuthenticationChallenge:
+     @method URLProtocol:didCancelAuthenticationChallenge:
      @abstract Cancel authentication for the specified request
      @param protocol The protocol object cancelling authentication.
      @param challenge The authentication challenge.
      */
-    func urlProtocol(_ protocol: SSURLProtocol, didCancel challenge: URLAuthenticationChallenge)
+    func urlProtocol(_ protocol: URLProtocol, didCancel challenge: URLAuthenticationChallenge)
 }
 
 internal class _ProtocolClient : NSObject {
-    var cachePolicy: SSURLCache.StoragePolicy = .notAllowed
+    var cachePolicy: URLCache.StoragePolicy = .notAllowed
     var cacheableData: [Data]?
     var cacheableResponse: URLResponse?
 }
@@ -162,13 +162,13 @@ internal class _ProtocolClient : NSObject {
     data. Concrete subclasses handle the specifics associated with one
     or more protocols or URL schemes.
 */
-open class SSURLProtocol : NSObject {
+open class URLProtocol : NSObject {
 
     private static var _registeredProtocolClasses = [AnyClass]()
     private static var _classesLock = NSLock()
 
-    //TODO: The right way to do this is using SSURLProtocol.property(forKey:in) and SSURLProtocol.setProperty(_:forKey:in)
-    var properties: [SSURLProtocol._PropertyKey: Any] = [:]
+    //TODO: The right way to do this is using URLProtocol.property(forKey:in) and URLProtocol.setProperty(_:forKey:in)
+    var properties: [URLProtocol._PropertyKey: Any] = [:]
     /*! 
         @method initWithRequest:cachedResponse:client:
         @abstract Initializes an NSURLProtocol given request, 
@@ -182,22 +182,22 @@ open class SSURLProtocol : NSObject {
         interface the protocol implementation can use to report results back
         to the URL loading system.
     */
-    public required init(request: URLRequest, cachedResponse: SSCachedURLResponse?, client: SSURLProtocolClient?) {
+    public required init(request: URLRequest, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
         self._request = request
         self._cachedResponse = cachedResponse
         self._client = client ?? _ProtocolClient()
     }
 
     private var _request : URLRequest
-    private var _cachedResponse : SSCachedURLResponse?
-    private var _client : SSURLProtocolClient?
+    private var _cachedResponse : CachedURLResponse?
+    private var _client : URLProtocolClient?
 
     /*! 
         @method client
         @abstract Returns the NSURLProtocolClient of the receiver. 
         @result The NSURLProtocolClient of the receiver.  
     */
-    open var client: SSURLProtocolClient? {
+    open var client: URLProtocolClient? {
         set { self._client = newValue }
         get { return self._client }
     }
@@ -216,7 +216,7 @@ open class SSURLProtocol : NSObject {
         @abstract Returns the NSCachedURLResponse of the receiver.  
         @result The NSCachedURLResponse of the receiver. 
     */
-    /*@NSCopying*/ open var cachedResponse: SSCachedURLResponse? {
+    /*@NSCopying*/ open var cachedResponse: CachedURLResponse? {
         return _cachedResponse
      }
     
@@ -317,7 +317,7 @@ open class SSURLProtocol : NSObject {
         had previously been stored with the given key in the given request.
     */
     open class func property(forKey key: String, in request: URLRequest) -> Any? {
-        return URLProtocol.property(forKey: key, in: request)
+        return Foundation.URLProtocol.property(forKey: key, in: request)
     }
     
     /*! 
@@ -332,7 +332,7 @@ open class SSURLProtocol : NSObject {
         @param request The request in which to store the property. 
     */
     open class func setProperty(_ value: Any, forKey key: String, in request: NSMutableURLRequest) {
-        URLProtocol.setProperty(value, forKey: key, in: request)
+        Foundation.URLProtocol.setProperty(value, forKey: key, in: request)
     }
     
     /*!
@@ -345,7 +345,7 @@ open class SSURLProtocol : NSObject {
         @param request The request to be modified
     */
     open class func removeProperty(forKey key: String, in request: NSMutableURLRequest) {
-        URLProtocol.removeProperty(forKey: key, in: request)
+        Foundation.URLProtocol.removeProperty(forKey: key, in: request)
     }
     
     /*! 
@@ -372,7 +372,7 @@ open class SSURLProtocol : NSObject {
         subclass of NSURLProtocol.
     */
     open class func registerClass(_ protocolClass: AnyClass) -> Bool {
-        if protocolClass is SSURLProtocol.Type {
+        if protocolClass is URLProtocol.Type {
             _classesLock.lock()
             guard !_registeredProtocolClasses.contains(where: { $0 === protocolClass }) else {
                 _classesLock.unlock()
@@ -392,7 +392,7 @@ open class SSURLProtocol : NSObject {
         let protocolClasses = protocols
         for protocolClass in protocolClasses {
             let urlProtocolClass: AnyClass = protocolClass
-            guard let urlProtocol = urlProtocolClass as? SSURLProtocol.Type else { fatalError() }
+            guard let urlProtocol = urlProtocolClass as? URLProtocol.Type else { fatalError() }
             if urlProtocol.canInit(with: request) {
                 _classesLock.unlock()
                 return urlProtocol
@@ -422,19 +422,19 @@ open class SSURLProtocol : NSObject {
         _classesLock.unlock()
     }
 
-    open class func canInit(with task: SSURLSessionTask) -> Bool {
+    open class func canInit(with task: URLSessionTask) -> Bool {
         guard let request = task.currentRequest else { return false }
         return canInit(with: request)
     }
-    public required convenience init(task: SSURLSessionTask, cachedResponse: SSCachedURLResponse?, client: SSURLProtocolClient?) {
+    public required convenience init(task: URLSessionTask, cachedResponse: CachedURLResponse?, client: URLProtocolClient?) {
         let urlRequest = task.originalRequest
         self.init(request: urlRequest!, cachedResponse: cachedResponse, client: client)
         self.task = task
     }
-    /*@NSCopying*/ open var task: SSURLSessionTask? {
+    /*@NSCopying*/ open var task: URLSessionTask? {
         set { self._task = newValue }
         get { return self._task }
     }
 
-    private var _task : SSURLSessionTask? = nil
+    private var _task : URLSessionTask? = nil
 }

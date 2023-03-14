@@ -68,13 +68,13 @@ private struct _PercentDecoder: IteratorProtocol {
 }
 
 
-internal class _DataURLProtocol: SSURLProtocol {
+internal class _DataURLProtocol: URLProtocol {
 
     override class func canInit(with request: URLRequest) -> Bool {
         return request.url?.scheme == "data"
     }
 
-    override class func canInit(with task: SSURLSessionTask) -> Bool {
+    override class func canInit(with task: URLSessionTask) -> Bool {
         return task.currentRequest?.url?.scheme == "data"
     }
 
@@ -83,7 +83,7 @@ internal class _DataURLProtocol: SSURLProtocol {
     }
 
     override func startLoading() {
-        guard let urlClient = self.client else { fatalError("No SSURLProtocol client set") }
+        guard let urlClient = self.client else { fatalError("No URLProtocol client set") }
 
         if let (response, decodedData) = decodeURI() {
             urlClient.urlProtocol(self, didReceive: response, cacheStoragePolicy: .allowed)
@@ -91,7 +91,7 @@ internal class _DataURLProtocol: SSURLProtocol {
             urlClient.urlProtocolDidFinishLoading(self)
         } else {
             let error = NSError(domain: NSURLErrorDomain, code: NSURLErrorBadURL)
-            if let session = self.task?.session as? SSURLSession, let delegate = session.delegate as? SSURLSessionTaskDelegate,
+            if let session = self.task?.session as? URLSession, let delegate = session.delegate as? URLSessionTaskDelegate,
                 let task = self.task {
                 delegate.urlSession(session, task: task, didCompleteWithError: error)
             }

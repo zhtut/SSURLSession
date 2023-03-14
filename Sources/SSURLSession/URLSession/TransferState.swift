@@ -1,4 +1,4 @@
-// Foundation/SSURLSession/TransferState.swift - SSURLSession & libcurl
+// Foundation/URLSession/TransferState.swift - URLSession & libcurl
 //
 // This source file is part of the Swift.org open source project
 //
@@ -11,9 +11,9 @@
 // -----------------------------------------------------------------------------
 ///
 /// The state of a single transfer.
-/// These are libcurl helpers for the SSURLSession API code.
+/// These are libcurl helpers for the URLSession API code.
 /// - SeeAlso: https://curl.haxx.se/libcurl/c/
-/// - SeeAlso: SSURLSession.swift
+/// - SeeAlso: URLSession.swift
 ///
 // -----------------------------------------------------------------------------
 
@@ -35,7 +35,7 @@ extension _NativeProtocol {
     /// `TransferState`.
     ///
     /// - TODO: Might move the `EasyHandle` into this `struct` ?
-    /// - SeeAlso: `SSURLSessionTask.EasyHandle`
+    /// - SeeAlso: `URLSessionTask.EasyHandle`
     internal struct _TransferState {
         /// The URL that's being requested
         let url: URL
