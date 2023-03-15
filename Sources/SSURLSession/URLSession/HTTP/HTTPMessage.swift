@@ -145,7 +145,7 @@ extension _HTTPURLProtocol._HTTPMessage._Challenge {
     /// - [RFC 7235 - Hypertext Transfer Protocol (HTTP/1.1): Authentication](https://tools.ietf.org/html/rfc7235)
     /// - [RFC 7617 - The 'Basic' HTTP Authentication Scheme](https://tools.ietf.org/html/rfc7617)
     static func challenges(from response: HTTPURLResponse) -> [_HTTPURLProtocol._HTTPMessage._Challenge] {
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, *), #available(macOS 10.15, *) {
             guard let authenticateValue = response.value(forHTTPHeaderField: "WWW-Authenticate") else {
                 return []
             }

@@ -44,7 +44,7 @@ internal class _WebSocketURLProtocol: _HTTPURLProtocol {
         guard case .transferInProgress(let ts) = self.internalState else { fatalError("Transfer not in progress.") }
         guard let response = ts.response as? HTTPURLResponse else { fatalError("Header complete, but not URL response.") }
 
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, *), #available(macOS 10.15, *) {
             webSocketTask.protocolPicked = response.value(forHTTPHeaderField: "Sec-WebSocket-Protocol")
         } else {
             webSocketTask.protocolPicked = response.allHeaderFields["Sec-WebSocket-Protocol"] as? String

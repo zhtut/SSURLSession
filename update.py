@@ -164,7 +164,7 @@ extension InputStream {
             return []
         }
         return challenges(from: authenticateValue)""",
-"""        if #available(iOS 13.0, *) {
+"""        if #available(iOS 13.0, *), #available(macOS 10.15, *) {
             guard let authenticateValue = response.value(forHTTPHeaderField: "WWW-Authenticate") else {
                 return []
             }
@@ -271,7 +271,7 @@ extension URLCredentialStorage {
     )
 
     replace('        webSocketTask.protocolPicked = response.value(forHTTPHeaderField: "Sec-WebSocket-Protocol")',
-'''        if #available(iOS 13.0, *) {
+'''        if #available(iOS 13.0, *), #available(macOS 10.15, *) {
             webSocketTask.protocolPicked = response.value(forHTTPHeaderField: "Sec-WebSocket-Protocol")
         } else {
             webSocketTask.protocolPicked = response.allHeaderFields["Sec-WebSocket-Protocol"] as? String
