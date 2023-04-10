@@ -31,14 +31,17 @@ def pull_origin():
         print("开始clone swift corelibs foundation")
         print(subprocess.getoutput(f"git clone {git_url} {folder}"))
 
+    print("开始复制文件")
     foundation_networking = f"{folder}/Sources/FoundationNetworking"
     ssurlsession = "Sources/SSURLSession"
     shutil.copytree(f"{foundation_networking}/URLSession", f"{ssurlsession}/URLSession", dirs_exist_ok=True)
     shutil.copy(f"{foundation_networking}/URLCache.swift", f"{ssurlsession}/")
     shutil.copy(f"{foundation_networking}/URLProtocol.swift", f"{ssurlsession}/")
     shutil.copy(f"{foundation_networking}/DataURLProtocol.swift", f"{ssurlsession}/")
+    print("复制文件完成")
 
 def modify():
+    print("开始修复文件")
     ssurlsession = "Sources/SSURLSession"
     swift_files = glob.glob(f"{ssurlsession}/**/*.swift", recursive=True)
 
@@ -323,6 +326,7 @@ extension URLCredentialStorage {
             key != "resolve" && key != "connectTo"
         }) {""", "HTTPURLProtocol")
 
+    print("完成")
 
 
 if __name__ == "__main__":
