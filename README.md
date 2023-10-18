@@ -50,7 +50,6 @@ let task = SSURLSession.URLSession.shared.dataTask(with: req, completionHandler:
             print("error: \(error)")
         }
     }
-    continuation.resume(returning: resp as? HTTPURLResponse)
 })
 task.resume()
 ```
