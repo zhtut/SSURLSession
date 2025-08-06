@@ -20,7 +20,6 @@ import Foundation
 #else
 import Foundation
 #endif
-@_implementationOnly import CoreFoundation
 
 private class Bag<Element> {
     var values: [Element] = []
@@ -28,7 +27,7 @@ private class Bag<Element> {
 
 /// A cancelable object that refers to the lifetime
 /// of processing a given request.
-open class URLSessionTask : NSObject, NSCopying {
+open class URLSessionTask : NSObject, NSCopying, @unchecked Sendable {
     
     // These properties aren't heeded in swift-corelibs-foundation, but we may heed them in the future. They exist for source compatibility.
     open var countOfBytesClientExpectsToReceive: Int64 = NSURLSessionTransferSizeUnknown {
@@ -38,12 +37,8 @@ open class URLSessionTask : NSObject, NSCopying {
         didSet { updateProgress() }
     }
     
-    #if NS_CURL_MISSING_XFERINFOFUNCTION
-    @available(*, deprecated, message: "This platform doesn't fully support reporting the progress of a URLSessionTask. The progress instance returned will be functional, but may not have continuous updates as bytes are sent or received.")
+    /* On platforms with NS_CURL_XFERINFOFUNCTION_SUPPORTED not set, the progress instance returned will be functional, but may not have continuous updates as bytes are sent or received. */
     open private(set) var progress = Progress(totalUnitCount: -1)
-    #else
-    open private(set) var progress = Progress(totalUnitCount: -1)
-    #endif
     
     func updateProgress() {
         self.workQueue.async {
@@ -103,6 +98,22 @@ open class URLSessionTask : NSObject, NSCopying {
     
     internal var actualSession: URLSession? { return session as? URLSession }
     internal var session: URLSessionProtocol! //change to nil when task completes
+
+    private var _taskDelegate: URLSessionTaskDelegate?
+    open var delegate: URLSessionTaskDelegate? {
+        get {
+            if let _taskDelegate { return _taskDelegate }
+            return self.actualSession?.delegate as? URLSessionTaskDelegate
+        }
+        set {
+            guard !self.hasTriggeredResume else {
+                fatalError("Cannot set task delegate after resumption")
+            }
+            _taskDelegate = newValue
+        }
+    }
+    
+    internal var _callCompletionHandlerInline = false
 
     fileprivate enum ProtocolState {
         case toBeCreated
@@ -211,12 +222,13 @@ open class URLSessionTask : NSObject, NSCopying {
             return
         }
         
-        if let session = actualSession, let delegate = session.delegate as? URLSessionTaskDelegate {
+        if let session = actualSession, let delegate = self.delegate {
+            nonisolated(unsafe) let nonisolatedCompletion = completion
             delegate.urlSession(session, task: self) { (stream) in
                 if let stream = stream {
-                    completion(.stream(stream))
+                    nonisolatedCompletion(.stream(stream))
                 } else {
-                    completion(.none)
+                    nonisolatedCompletion(.none)
                 }
             }
         } else {
@@ -375,6 +387,8 @@ open class URLSessionTask : NSObject, NSCopying {
             }
             guard !canceled else { return }
             self._getProtocol { (urlProtocol) in
+                // The combination of locking in getProtocol and dispatching to the work queue let us use the normally non-Sendable URLProtocol
+                nonisolated(unsafe) let urlProtocol = urlProtocol
                 self.workQueue.async {
                     var info = [NSLocalizedDescriptionKey: "\(URLError.Code.cancelled)" as Any]
                     if let url = self.originalRequest?.url {
@@ -444,6 +458,8 @@ open class URLSessionTask : NSObject, NSCopying {
             
             if self.suspendCount == 1 {
                 self._getProtocol { (urlProtocol) in
+                    // The combination of locking in getProtocol and dispatching to the work queue let us use the normally non-Sendable URLProtocol
+                    nonisolated(unsafe) let urlProtocol = urlProtocol
                     self.workQueue.async {
                         urlProtocol?.stopLoading()
                     }
@@ -462,6 +478,8 @@ open class URLSessionTask : NSObject, NSCopying {
             if self.suspendCount == 0 {
                 self.hasTriggeredResume = true
                 self._getProtocol { (urlProtocol) in
+                    // The combination of locking in getProtocol and dispatching to the work queue let us use the normally non-Sendable URLProtocol
+                    nonisolated(unsafe) let urlProtocol = urlProtocol
                     self.workQueue.async {
                         if let _protocol = urlProtocol {
                             _protocol.startLoading()
@@ -511,7 +529,7 @@ open class URLSessionTask : NSObject, NSCopying {
 }
 
 extension URLSessionTask {
-    public enum State : Int {
+    public enum State : Int, Sendable {
         /// The task is currently being serviced by the session
         case running
         case suspended
@@ -611,7 +629,7 @@ extension URLSessionTask {
  * functionality over an URLSessionTask and its presence is merely
  * to provide lexical differentiation from download and upload tasks.
  */
-open class URLSessionDataTask : URLSessionTask {
+open class URLSessionDataTask : URLSessionTask, @unchecked Sendable {
 }
 
 /*
@@ -620,14 +638,14 @@ open class URLSessionDataTask : URLSessionTask {
  * that may be sent referencing an URLSessionDataTask equally apply
  * to URLSessionUploadTasks.
  */
-open class URLSessionUploadTask : URLSessionDataTask {
+open class URLSessionUploadTask : URLSessionDataTask, @unchecked Sendable  {
 }
 
 /*
  * URLSessionDownloadTask is a task that represents a download to
  * local storage.
  */
-open class URLSessionDownloadTask : URLSessionTask {
+open class URLSessionDownloadTask : URLSessionTask, @unchecked Sendable  {
     
     var createdFromInvalidResumeData = false
     
@@ -669,8 +687,8 @@ open class URLSessionDownloadTask : URLSessionTask {
  * and once the WebSocket handshake is successful, the client can read and write
  * messages that will be framed using the WebSocket protocol by the framework.
  */
-open class URLSessionWebSocketTask : URLSessionTask {
-    public enum CloseCode : Int, @unchecked Sendable {
+open class URLSessionWebSocketTask : URLSessionTask, @unchecked Sendable  {
+    public enum CloseCode : Int, Sendable {
         case invalid = 0
         case normalClosure = 1000
         case goingAway = 1001
@@ -686,7 +704,7 @@ open class URLSessionWebSocketTask : URLSessionTask {
         case tlsHandshakeFailure = 1015
     }
     
-    public enum Message {
+    public enum Message : Sendable {
         case data(Data)
         case string(String)
     }
@@ -709,10 +727,10 @@ open class URLSessionWebSocketTask : URLSessionTask {
         }
     }
 
-    private var sendBuffer = [(Message, (Error?) -> Void)]()
+    private var sendBuffer = [(Message, @Sendable (Error?) -> Void)]()
     private var receiveBuffer = [Message]()
-    private var receiveCompletionHandlers = [(Result<Message, Error>) -> Void]()
-    private var pongCompletionHandlers = [(Error?) -> Void]()
+    private var receiveCompletionHandlers = [@Sendable (Result<Message, Error>) -> Void]()
+    private var pongCompletionHandlers = [@Sendable (Error?) -> Void]()
     private var closeMessage: (CloseCode, Data)? = nil
     
     internal var protocolPicked: String? = nil
@@ -748,9 +766,11 @@ open class URLSessionWebSocketTask : URLSessionTask {
         }
     }
     
-    open func sendPing(pongReceiveHandler: @escaping (Error?) -> Void) {
+    open func sendPing(pongReceiveHandler: @Sendable @escaping (Error?) -> Void) {
         self.workQueue.async {
             self._getProtocol { urlProtocol in
+                // The combination of locking in getProtocol and dispatching to the work queue let us use the normally non-Sendable URLProtocol
+                nonisolated(unsafe) let urlProtocol = urlProtocol
                 self.workQueue.async {
                     if let webSocketProtocol = urlProtocol as? _WebSocketURLProtocol {
                         do {
@@ -810,7 +830,8 @@ open class URLSessionWebSocketTask : URLSessionTask {
         }
     }
     
-    private func send(_ message: Message, completionHandler: @escaping (Error?) -> Void) {
+    @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+    public func send(_ message: Message, completionHandler: @Sendable @escaping (Error?) -> Void) {
         self.workQueue.async {
             self.sendBuffer.append((message, completionHandler))
             self.doPendingWork()
@@ -826,7 +847,8 @@ open class URLSessionWebSocketTask : URLSessionTask {
         }
     }
 
-    private func receive(completionHandler: @escaping (Result<Message, Error>) -> Void) {
+    @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
+    public func receive(completionHandler: @Sendable @escaping (Result<Message, Error>) -> Void) {
         self.workQueue.async {
             self.receiveCompletionHandlers.append(completionHandler)
             self.doPendingWork()
@@ -849,7 +871,15 @@ open class URLSessionWebSocketTask : URLSessionTask {
                     }
                 }
                 self.receiveCompletionHandlers.removeAll()
+                for handler in self.pongCompletionHandlers {
+                    session.delegateQueue.addOperation {
+                        handler(taskError)
+                    }
+                }
+                self.pongCompletionHandlers.removeAll()
                 self._getProtocol { urlProtocol in
+                    // The combination of locking in getProtocol and dispatching to the work queue let us use the normally non-Sendable URLProtocol
+                    nonisolated(unsafe) let urlProtocol = urlProtocol
                     self.workQueue.async {
                         if self.handshakeCompleted && self.state != .completed {
                             if let webSocketProtocol = urlProtocol as? _WebSocketURLProtocol {
@@ -865,6 +895,8 @@ open class URLSessionWebSocketTask : URLSessionTask {
                 }
             } else {
                 self._getProtocol { urlProtocol in
+                    // The combination of locking in getProtocol and dispatching to the work queue let us use the normally non-Sendable URLProtocol
+                    nonisolated(unsafe) let urlProtocol = urlProtocol
                     self.workQueue.async {
                         if self.handshakeCompleted {
                             if let webSocketProtocol = urlProtocol as? _WebSocketURLProtocol {
@@ -958,8 +990,7 @@ extension URLSessionWebSocketDelegate {
  * disassociated from the underlying session.
  */
 
-@available(*, deprecated, message: "URLSessionStreamTask is not available in swift-corelibs-foundation")
-open class URLSessionStreamTask : URLSessionTask {
+open class URLSessionStreamTask : URLSessionTask, @unchecked Sendable  {
     
     /* Read minBytes, or at most maxBytes bytes and invoke the completion
      * handler on the sessions delegate queue with the data or an error.
@@ -1044,7 +1075,9 @@ extension _ProtocolClient : URLProtocolClient {
         }
         
         switch session.behaviour(for: task) {
-        case .taskDelegate(let delegate):
+        case .taskDelegate(let delegate),
+                .dataCompletionHandlerWithTaskDelegate(_, let delegate),
+                .downloadCompletionHandlerWithTaskDelegate(_, let delegate):
             if let dataDelegate = delegate as? URLSessionDataDelegate,
                let dataTask = task as? URLSessionDataTask {
                 session.delegateQueue.addOperation {
@@ -1119,7 +1152,7 @@ extension _ProtocolClient : URLProtocolClient {
             let cacheable = CachedURLResponse(response: response, data: Data(data.joined()), storagePolicy: cachePolicy)
             let protocolAllows = (urlProtocol as? _NativeProtocol)?.canCache(cacheable) ?? false
             if protocolAllows {
-                if let delegate = task.session.delegate as? URLSessionDataDelegate {
+                if let delegate = task.delegate as? URLSessionDataDelegate {
                     delegate.urlSession(task.session as! URLSession, dataTask: task, willCacheResponse: cacheable) { (actualCacheable) in
                         if let actualCacheable = actualCacheable {
                             cache.storeCachedResponse(actualCacheable, for: task)
@@ -1134,8 +1167,9 @@ extension _ProtocolClient : URLProtocolClient {
         switch session.behaviour(for: task) {
         case .taskDelegate(let delegate):
             if let downloadDelegate = delegate as? URLSessionDownloadDelegate, let downloadTask = task as? URLSessionDownloadTask {
+                let temporaryFileURL = urlProtocol.properties[URLProtocol._PropertyKey.temporaryFileURL] as! URL
                 session.delegateQueue.addOperation {
-                    downloadDelegate.urlSession(session, downloadTask: downloadTask, didFinishDownloadingTo: urlProtocol.properties[URLProtocol._PropertyKey.temporaryFileURL] as! URL)
+                    downloadDelegate.urlSession(session, downloadTask: downloadTask, didFinishDownloadingTo: temporaryFileURL)
                 }
             } else if let webSocketDelegate = delegate as? URLSessionWebSocketDelegate,
                       let webSocketTask = task as? URLSessionWebSocketTask {
@@ -1157,22 +1191,40 @@ extension _ProtocolClient : URLProtocolClient {
             session.workQueue.async {
                 session.taskRegistry.remove(task)
             }
-        case .dataCompletionHandler(let completion):
-            session.delegateQueue.addOperation {
+        case .dataCompletionHandler(let completion),
+             .dataCompletionHandlerWithTaskDelegate(let completion, _):
+            nonisolated(unsafe) let nonisolatedURLProtocol = urlProtocol
+            let dataCompletion : @Sendable () -> () = {
                 guard task.state != .completed else { return }
-                completion(urlProtocol.properties[URLProtocol._PropertyKey.responseData] as? Data ?? Data(), task.response, nil)
+                completion(nonisolatedURLProtocol.properties[URLProtocol._PropertyKey.responseData] as? Data ?? Data(), task.response, nil)
                 task.state = .completed
                 session.workQueue.async {
                     session.taskRegistry.remove(task)
                 }
             }
-        case .downloadCompletionHandler(let completion):
-            session.delegateQueue.addOperation {
+            if task._callCompletionHandlerInline {
+                dataCompletion()
+            } else {
+                session.delegateQueue.addOperation {
+                    dataCompletion()
+                }
+            }
+        case .downloadCompletionHandler(let completion),
+             .downloadCompletionHandlerWithTaskDelegate(let completion, _):
+            nonisolated(unsafe) let nonisolatedURLProtocol = urlProtocol
+            let downloadCompletion : @Sendable () -> () = {
                 guard task.state != .completed else { return }
-                completion(urlProtocol.properties[URLProtocol._PropertyKey.temporaryFileURL] as? URL, task.response, nil)
+                completion(nonisolatedURLProtocol.properties[URLProtocol._PropertyKey.temporaryFileURL] as? URL, task.response, nil)
                 task.state = .completed
                 session.workQueue.async {
                     session.taskRegistry.remove(task)
+                }
+            }
+            if task._callCompletionHandlerInline {
+                downloadCompletion()
+            } else {
+                session.delegateQueue.addOperation {
+                    downloadCompletion()
                 }
             }
         }
@@ -1189,7 +1241,7 @@ extension _ProtocolClient : URLProtocolClient {
         guard let task = `protocol`.task else { fatalError("Received response, but there's no task.") }
         guard let session = task.session as? URLSession else { fatalError("Task not associated with URLSession.") }
         
-        func proceed(using credential: URLCredential?) {
+        @Sendable func proceed(using credential: URLCredential?) {
             let protectionSpace = challenge.protectionSpace
             let authScheme = protectionSpace.authenticationMethod
 
@@ -1212,7 +1264,7 @@ extension _ProtocolClient : URLProtocolClient {
             task.resume()
         }
         
-        func attemptProceedingWithDefaultCredential() {
+        @Sendable func attemptProceedingWithDefaultCredential() {
             if let credential = challenge.proposedCredential {
                 let last = task._protocolLock.performLocked { task._lastCredentialUsedFromStorageDuringAuthentication }
                 
@@ -1224,7 +1276,7 @@ extension _ProtocolClient : URLProtocolClient {
             }
         }
         
-        if let delegate = session.delegate as? URLSessionTaskDelegate {
+        if let delegate = task.delegate {
             session.delegateQueue.addOperation {
                 delegate.urlSession(session, task: task, didReceive: challenge) { disposition, credential in
                     
@@ -1297,8 +1349,9 @@ extension _ProtocolClient : URLProtocolClient {
             session.workQueue.async {
                 session.taskRegistry.remove(task)
             }
-        case .dataCompletionHandler(let completion):
-            session.delegateQueue.addOperation {
+        case .dataCompletionHandler(let completion),
+             .dataCompletionHandlerWithTaskDelegate(let completion, _):
+            let dataCompletion : @Sendable () -> () = {
                 guard task.state != .completed else { return }
                 completion(nil, nil, error)
                 task.state = .completed
@@ -1306,13 +1359,28 @@ extension _ProtocolClient : URLProtocolClient {
                     session.taskRegistry.remove(task)
                 }
             }
-        case .downloadCompletionHandler(let completion):
-            session.delegateQueue.addOperation {
+            if task._callCompletionHandlerInline {
+                dataCompletion()
+            } else {
+                session.delegateQueue.addOperation {
+                    dataCompletion()
+                }
+            }
+        case .downloadCompletionHandler(let completion),
+             .downloadCompletionHandlerWithTaskDelegate(let completion, _):
+            let downloadCompletion : @Sendable () -> () = {
                 guard task.state != .completed else { return }
                 completion(nil, nil, error)
                 task.state = .completed
                 session.workQueue.async {
                     session.taskRegistry.remove(task)
+                }
+            }
+            if task._callCompletionHandlerInline {
+                downloadCompletion()
+            } else {
+                session.delegateQueue.addOperation {
+                    downloadCompletion()
                 }
             }
         }
@@ -1352,7 +1420,7 @@ extension URLSessionTask {
 }
 
 extension URLProtocol {
-    enum _PropertyKey: String {
+    enum _PropertyKey: String, Sendable {
         case responseData
         case temporaryFileURL
     }

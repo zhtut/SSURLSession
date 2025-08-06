@@ -22,7 +22,6 @@ import Foundation
 #else
 import Foundation
 #endif
-@_implementationOnly import CoreFoundation
 
 internal extension _HTTPURLProtocol._ResponseHeaderLines {
     /// Create an `NSHTTPRULResponse` from the lines.
@@ -443,7 +442,7 @@ private extension String.UnicodeScalarView.SubSequence {
     var rangeOfTokenPrefix: Range<Index>? {
         guard !isEmpty else { return nil }
         var end = startIndex
-        while self[end].isValidMessageToken {
+        while end != self.endIndex && self[end].isValidMessageToken {
             end = self.index(after: end)
         }
         guard end != startIndex else { return nil }

@@ -20,21 +20,21 @@ import Foundation
 #else
 import Foundation
 #endif
-@_implementationOnly import CoreFoundation
 
-open class URLSessionTaskMetrics : NSObject {
+open class URLSessionTaskMetrics : NSObject, @unchecked Sendable {
     public internal(set) var transactionMetrics: [URLSessionTaskTransactionMetrics] = []
     public internal(set) var taskInterval: DateInterval = .init()
     public internal(set) var redirectCount = 0
 
-    public enum ResourceFetchType: Int {
+    public enum ResourceFetchType: Int, Sendable {
         case unknown = 0
         case networkLoad = 1
+        @available(swift, deprecated: 6.1, message: "Server push is not supported")
         case serverPush = 2
         case localCache = 3
     }
 
-    public enum DomainResolutionProtocol: Int {
+    public enum DomainResolutionProtocol: Int, Sendable {
         case unknown = 0
         case udp = 1
         case tcp = 2
@@ -43,7 +43,7 @@ open class URLSessionTaskMetrics : NSObject {
     }
 }
 
-open class URLSessionTaskTransactionMetrics: NSObject {
+open class URLSessionTaskTransactionMetrics: NSObject, @unchecked Sendable {
     public let request: URLRequest
     public internal(set) var response: URLResponse?
 
@@ -87,7 +87,7 @@ open class URLSessionTaskTransactionMetrics: NSObject {
     }
 }
 
-public enum tls_ciphersuite_t: UInt16 {
+public enum tls_ciphersuite_t: UInt16, Sendable {
     case AES_128_GCM_SHA256 = 4865
     case AES_256_GCM_SHA384 = 4866
 
@@ -119,7 +119,7 @@ public enum tls_ciphersuite_t: UInt16 {
     case RSA_WITH_AES_256_GCM_SHA384 = 157
 }
 
-public enum tls_protocol_version_t: UInt16 {
+public enum tls_protocol_version_t: UInt16, Sendable {
     case TLSv10 = 769
     case TLSv11 = 770
     case TLSv12 = 771

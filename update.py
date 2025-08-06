@@ -22,14 +22,14 @@ class File:
                 w.write(origin)
 
 def pull_origin():
-    git_url = "https://github.com/apple/swift-corelibs-foundation.git"
+    git_url = "https://github.com/swiftlang/swift-corelibs-foundation.git"
     folder = "swiftFoundation"
     if os.path.exists(folder):
         print("已存在，更新一下")
         print(subprocess.getoutput(f"cd {folder} && git pull"))
     else:
         print("开始clone swift corelibs foundation")
-        print(subprocess.getoutput(f"git clone {git_url} {folder}"))
+        print(subprocess.getoutput(f"git clone {git_url} {folder} --depth=1"))
 
     print("开始复制文件")
     foundation_networking = f"{folder}/Sources/FoundationNetworking"

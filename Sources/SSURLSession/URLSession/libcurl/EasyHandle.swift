@@ -23,11 +23,22 @@ import Foundation
 import Foundation
 #endif
 
-@_implementationOnly import CoreFoundation
-@_implementationOnly import CFURLSessionInterface
+@_implementationOnly import _CFURLSessionInterface
 import Dispatch
 
+// These helper functions avoid warnings about "will never be executed" code which checks the availability of the underlying libcurl features.
 
+internal func curlInfoCAInfoSupported() -> Bool {
+    CFURLSessionInfoCAINFO.value != CFURLSessionInfoNONE.value
+}
+
+internal func maxHostConnectionsSupported() -> Bool {
+    CFURLSessionMultiOptionMAX_HOST_CONNECTIONS.value != 0
+}
+
+internal func xferInfoFunctionSupported() -> Bool {
+    CFURLSessionOptionXFERINFOFUNCTION.value != 0
+}
 
 /// Minimal wrapper around the [curl easy interface](https://curl.haxx.se/libcurl/c/)
 ///
@@ -45,7 +56,7 @@ import Dispatch
 /// TCP streams and HTTP transfers / easy handles. A single TCP stream and
 /// its socket may be shared by multiple easy handles.
 ///
-/// A single HTTP request-response exchange (refered to here as a
+/// A single HTTP request-response exchange (referred to here as a
 /// *transfer*) corresponds directly to an easy handle. Hence anything that
 /// needs to be configured for a specific transfer (e.g. the URL) will be
 /// configured on an easy handle.
@@ -57,6 +68,9 @@ import Dispatch
 ///
 /// - Note: All code assumes that it is being called on a single thread /
 /// `Dispatch` only -- it is intentionally **not** thread safe.
+@available(*, unavailable)
+extension _EasyHandle : Sendable { }
+
 internal final class _EasyHandle {
     let rawHandle = CFURLSessionEasyHandleInit()
     weak var delegate: _EasyHandleDelegate?
@@ -184,17 +198,17 @@ extension _EasyHandle {
         _config = config
     }
 
-    /// Set allowed protocols
+    /// Set the CA bundle path automatically if it isn't set
     ///
-    /// - Note: This has security implications. Not limiting this, someone could
-    /// redirect a HTTP request into one of the many other protocols that libcurl
-    /// supports.
-    /// - SeeAlso: https://curl.haxx.se/libcurl/c/CURLOPT_PROTOCOLS.html
-    /// - SeeAlso: https://curl.haxx.se/libcurl/c/CURLOPT_REDIR_PROTOCOLS.html
-    func setAllowedProtocolsToHTTPAndHTTPS() {
-        let protocols = (CFURLSessionProtocolHTTP | CFURLSessionProtocolHTTPS)
-        try! CFURLSession_easy_setopt_long(rawHandle, CFURLSessionOptionPROTOCOLS, protocols).asError()
-        try! CFURLSession_easy_setopt_long(rawHandle, CFURLSessionOptionREDIR_PROTOCOLS, protocols).asError()
+    /// Curl does not necessarily know where to find the CA root bundle,
+    /// and in that case we need to specify where it is.  There was a hack
+    /// to do this automatically for Android but allowing an environment
+    /// variable to control the location of the CA root bundle seems like
+    /// a security issue in general.
+    ///
+    /// Rather than doing that, we have a list of places we might expect
+    /// to find it, and search those until we locate a suitable file.
+    func setCARootBundlePath() {
 #if os(Android)
         // See https://curl.haxx.se/docs/sslcerts.html
         // For SSL on Android you need a "cacert.pem" to be
@@ -207,8 +221,57 @@ extension _EasyHandle {
             else {
                 try! CFURLSession_easy_setopt_ptr(rawHandle, CFURLSessionOptionCAINFO, caInfo).asError()
             }
+            return
         }
 #endif
+
+#if !os(Windows) && !os(macOS) && !os(iOS) && !os(watchOS) && !os(tvOS)
+        if curlInfoCAInfoSupported() {
+            // Check if there is a default path; if there is, it will already
+            // be set, so leave things alone
+            var p: UnsafeMutablePointer<Int8>? = nil
+            
+            try! CFURLSession_easy_getinfo_charp(rawHandle, CFURLSessionInfoCAINFO, &p).asError()
+            if p != nil {
+                return
+            }
+            
+            // Otherwise, search a list of known paths
+            let paths = [
+                "/etc/ssl/certs/ca-certificates.crt",
+                "/etc/pki/tls/certs/ca-bundle.crt",
+                "/usr/share/ssl/certs/ca-bundle.crt",
+                "/usr/local/share/certs/ca-root-nss.crt",
+                "/etc/ssl/cert.pem"
+            ]
+            
+            for path in paths {
+                var isDirectory: ObjCBool = false
+                if FileManager.default.fileExists(atPath: path,
+                                                  isDirectory: &isDirectory)
+                    && !isDirectory.boolValue {
+                    path.withCString { pathPtr in
+                        try! CFURLSession_easy_setopt_ptr(rawHandle, CFURLSessionOptionCAINFO, UnsafeMutablePointer(mutating: pathPtr)).asError()
+                    }
+                    return
+                }
+            }
+        }
+#endif // !os(Windows) && !os(macOS) && !os(iOS) && !os(watchOS) && !os(tvOS)
+    }
+
+    /// Set allowed protocols
+    ///
+    /// - Note: This has security implications. Not limiting this, someone could
+    /// redirect a HTTP request into one of the many other protocols that libcurl
+    /// supports.
+    /// - SeeAlso: https://curl.haxx.se/libcurl/c/CURLOPT_PROTOCOLS.html
+    /// - SeeAlso: https://curl.haxx.se/libcurl/c/CURLOPT_REDIR_PROTOCOLS.html
+    func setAllowedProtocolsToHTTPAndHTTPS() {
+        let protocols = (CFURLSessionProtocolHTTP | CFURLSessionProtocolHTTPS)
+        try! CFURLSession_easy_setopt_long(rawHandle, CFURLSessionOptionPROTOCOLS, protocols).asError()
+        try! CFURLSession_easy_setopt_long(rawHandle, CFURLSessionOptionREDIR_PROTOCOLS, protocols).asError()
+        setCARootBundlePath()
         //TODO: Added in libcurl 7.45.0
         //TODO: Set default protocol for schemeless URLs
         //CURLOPT_DEFAULT_PROTOCOL available only in libcurl 7.45.0
@@ -219,6 +282,7 @@ extension _EasyHandle {
         let redirectProtocols = (CFURLSessionProtocolHTTP | CFURLSessionProtocolHTTPS)
         try! CFURLSession_easy_setopt_long(rawHandle, CFURLSessionOptionPROTOCOLS, protocols).asError()
         try! CFURLSession_easy_setopt_long(rawHandle, CFURLSessionOptionREDIR_PROTOCOLS, redirectProtocols).asError()
+        setCARootBundlePath()
     }
     
     //TODO: Proxy setting, namely CFURLSessionOptionPROXY, CFURLSessionOptionPROXYPORT,
@@ -593,13 +657,13 @@ fileprivate extension _EasyHandle {
         
         try! CFURLSession_easy_setopt_ptr(rawHandle, CFURLSessionOptionPROGRESSDATA, UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())).asError()
         
-        #if !NS_CURL_MISSING_XFERINFOFUNCTION
-        try! CFURLSession_easy_setopt_tc(rawHandle, CFURLSessionOptionXFERINFOFUNCTION, { (userdata: UnsafeMutableRawPointer?, dltotal :Int64, dlnow: Int64, ultotal: Int64, ulnow: Int64) -> Int32 in
-            guard let handle = _EasyHandle.from(callbackUserData: userdata) else { return -1 }
-            handle.updateProgressMeter(with: _Progress(totalBytesSent: ulnow, totalBytesExpectedToSend: ultotal, totalBytesReceived: dlnow, totalBytesExpectedToReceive: dltotal))
-            return 0
-        }).asError()
-        #endif
+        if xferInfoFunctionSupported() {
+            try! CFURLSession_easy_setopt_tc(rawHandle, CFURLSessionOptionXFERINFOFUNCTION, { (userdata: UnsafeMutableRawPointer?, dltotal :Int64, dlnow: Int64, ultotal: Int64, ulnow: Int64) -> Int32 in
+                guard let handle = _EasyHandle.from(callbackUserData: userdata) else { return -1 }
+                handle.updateProgressMeter(with: _Progress(totalBytesSent: ulnow, totalBytesExpectedToSend: ultotal, totalBytesReceived: dlnow, totalBytesExpectedToReceive: dltotal))
+                return 0
+            }).asError()
+        }
 
     }
     /// This callback function gets called by libcurl when it receives body

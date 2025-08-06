@@ -13,7 +13,6 @@ import Foundation
 import Foundation
 #endif
 
-@_implementationOnly import CoreFoundation
 import Dispatch
 
 internal class _FTPURLProtocol: _NativeProtocol {
@@ -67,7 +66,7 @@ internal class _FTPURLProtocol: _NativeProtocol {
             try easyHandle.set(url: url)
         } catch {
             self.internalState = .transferFailed
-            let nsError = error as? NSError ?? NSError(domain: NSURLErrorDomain, code: NSURLErrorBadURL)
+            let nsError = NSError(domain: NSURLErrorDomain, code: NSURLErrorBadURL)
             failWith(error: nsError, request: request)
             return
         }
@@ -119,7 +118,7 @@ internal extension _FTPURLProtocol {
         switch session.behaviour(for: self.task!) {
         case .noDelegate:
             break
-        case .taskDelegate:
+        case .taskDelegate, .dataCompletionHandlerWithTaskDelegate, .downloadCompletionHandlerWithTaskDelegate:
             self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         case .dataCompletionHandler:
             break

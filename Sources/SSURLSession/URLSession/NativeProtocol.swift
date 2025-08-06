@@ -23,7 +23,6 @@ import Foundation
 import Foundation
 #endif
 
-@_implementationOnly import CoreFoundation
 import Dispatch
 
 internal let enableLibcurlDebugOutput: Bool = {
@@ -129,43 +128,59 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
     }
 
     fileprivate func notifyDelegate(aboutReceivedData data: Data) {
-        guard let t = self.task else {
+        guard let task = self.task, let session = task.session as? URLSession else {
             fatalError("Cannot notify")
         }
-        if case .taskDelegate(let delegate) = t.session.behaviour(for: self.task!),
-            let dataDelegate = delegate as? URLSessionDataDelegate,
-            let task = self.task as? URLSessionDataTask {
-            // Forward to the delegate:
-            guard let s = self.task?.session as? URLSession else {
-                fatalError()
+        switch task.session.behaviour(for: task) {
+        case .taskDelegate(let delegate),
+             .dataCompletionHandlerWithTaskDelegate(_, let delegate),
+             .downloadCompletionHandlerWithTaskDelegate(_, let delegate):
+            if let dataDelegate = delegate as? URLSessionDataDelegate,
+               let dataTask = task as? URLSessionDataTask {
+                session.delegateQueue.addOperation {
+                    dataDelegate.urlSession(session, dataTask: dataTask, didReceive: data)
+                }
+            } else if let downloadDelegate = delegate as? URLSessionDownloadDelegate,
+                      let downloadTask = task as? URLSessionDownloadTask {
+                let fileHandle = try! FileHandle(forWritingTo: self.tempFileURL)
+                _ = fileHandle.seekToEndOfFile()
+                fileHandle.write(data)
+                task.countOfBytesReceived  += Int64(data.count)
+                session.delegateQueue.addOperation {
+                    downloadDelegate.urlSession(
+                        session,
+                        downloadTask: downloadTask,
+                        didWriteData: Int64(data.count),
+                        totalBytesWritten: task.countOfBytesReceived,
+                        totalBytesExpectedToWrite: task.countOfBytesExpectedToReceive
+                    )
+                }
             }
-            s.delegateQueue.addOperation {
-                dataDelegate.urlSession(s, dataTask: task, didReceive: data)
-            }
-        } else if case .taskDelegate(let delegate) = t.session.behaviour(for: self.task!),
-            let downloadDelegate = delegate as? URLSessionDownloadDelegate,
-            let task = self.task as? URLSessionDownloadTask {
-            guard let s = self.task?.session as? URLSession else {
-                fatalError()
-            }
-            let fileHandle = try! FileHandle(forWritingTo: self.tempFileURL)
-            _ = fileHandle.seekToEndOfFile()
-            fileHandle.write(data)
-            task.countOfBytesReceived  += Int64(data.count)
-            s.delegateQueue.addOperation {
-                downloadDelegate.urlSession(s, downloadTask: task, didWriteData: Int64(data.count), totalBytesWritten: task.countOfBytesReceived,
-                                            totalBytesExpectedToWrite: task.countOfBytesExpectedToReceive)
-            }
+        default:
+            break
         }
     }
 
     fileprivate func notifyDelegate(aboutUploadedData count: Int64) {
-        guard let task = self.task, let session = task.session as? URLSession,
-            case .taskDelegate(let delegate) = session.behaviour(for: task) else { return }
-        task.countOfBytesSent += count
-        session.delegateQueue.addOperation {
-            delegate.urlSession(session, task: task, didSendBodyData: count,
-                                totalBytesSent: task.countOfBytesSent, totalBytesExpectedToSend: task.countOfBytesExpectedToSend)
+        guard let task = self.task, let session = task.session as? URLSession else {
+            return
+        }
+        switch session.behaviour(for: task) {
+        case .taskDelegate(let delegate),
+             .dataCompletionHandlerWithTaskDelegate(_, let delegate),
+             .downloadCompletionHandlerWithTaskDelegate(_, let delegate):
+            task.countOfBytesSent += count
+            session.delegateQueue.addOperation {
+                delegate.urlSession(
+                    session,
+                    task: task,
+                    didSendBodyData: count,
+                    totalBytesSent: task.countOfBytesSent,
+                    totalBytesExpectedToSend: task.countOfBytesExpectedToSend
+                )
+            }
+        default:
+            break
         }
     }
 
@@ -282,9 +297,10 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
         // We will reset the body source and seek forward.
         guard let session = task?.session as? URLSession else { fatalError() }
         
-        var currentInputStream: InputStream?
+        // TODO: InputStream is not Sendable, but it seems safe here beacuse of the wait on the dispatch group. It would be nice to prove this to the compiler.
+        nonisolated(unsafe) var currentInputStream: InputStream?
         
-        if let delegate = session.delegate as? URLSessionTaskDelegate {
+        if let delegate = task?.delegate {
             let dispatchGroup = DispatchGroup()
             dispatchGroup.enter()
             
@@ -338,11 +354,13 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
             // Data will be forwarded to the delegate as we receive it, we don't
             // need to do anything about it.
             return .ignore
-        case .dataCompletionHandler:
+        case .dataCompletionHandler,
+             .dataCompletionHandlerWithTaskDelegate:
             // Data needs to be concatenated in-memory such that we can pass it
             // to the completion handler upon completion.
             return .inMemory(nil)
-        case .downloadCompletionHandler:
+        case .downloadCompletionHandler,
+             .downloadCompletionHandlerWithTaskDelegate:
             // Data needs to be written to a file (i.e. a download task).
             let fileHandle = try! FileHandle(forWritingTo: self.tempFileURL)
             return .toFile(self.tempFileURL, fileHandle)
@@ -396,16 +414,17 @@ internal class _NativeProtocol: URLProtocol, _EasyHandleDelegate {
             // Check if the cached response is good to use:
             if let cachedResponse = cachedResponse, canRespondFromCache(using: cachedResponse) {
                 self.internalState = .fulfillingFromCache(cachedResponse)
+                nonisolated(unsafe) let nonisolatedSelf = self
                 task?.workQueue.async {
-                    self.client?.urlProtocol(self, cachedResponseIsValid: cachedResponse)
-                    self.client?.urlProtocol(self, didReceive: cachedResponse.response, cacheStoragePolicy: .notAllowed)
+                    nonisolatedSelf.client?.urlProtocol(nonisolatedSelf, cachedResponseIsValid: cachedResponse)
+                    nonisolatedSelf.client?.urlProtocol(nonisolatedSelf, didReceive: cachedResponse.response, cacheStoragePolicy: .notAllowed)
                     if !cachedResponse.data.isEmpty {
-                        self.client?.urlProtocol(self, didLoad: cachedResponse.data)
+                        nonisolatedSelf.client?.urlProtocol(nonisolatedSelf, didLoad: cachedResponse.data)
                     }
                     
-                    self.client?.urlProtocolDidFinishLoading(self)
+                    nonisolatedSelf.client?.urlProtocolDidFinishLoading(nonisolatedSelf)
                     
-                    self.internalState = .taskCompleted
+                    nonisolatedSelf.internalState = .taskCompleted
                 }
                 
             } else {
@@ -494,11 +513,12 @@ extension _NativeProtocol {
         guard let s = task?.session as? URLSession else {
             fatalError()
         }
+        
+        nonisolated(unsafe) let nonisolatedSelf = self
         s.delegateQueue.addOperation {
-            delegate.urlSession(s, dataTask: dt, didReceive: response, completionHandler: { [weak self] disposition in
-                guard let task = self else { return }
-                self?.task?.workQueue.async {
-                    task.didCompleteResponseCallback(disposition: disposition)
+            delegate.urlSession(s, dataTask: dt, didReceive: response, completionHandler: { disposition in
+                nonisolatedSelf.task?.workQueue.async {
+                    nonisolatedSelf.didCompleteResponseCallback(disposition: disposition)
                 }
             })
         }

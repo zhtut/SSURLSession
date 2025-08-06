@@ -167,33 +167,32 @@ import Foundation
 #else
 import Foundation
 #endif
-@_implementationOnly import CoreFoundation
+
+internal import Synchronization
 
 extension URLSession {
-    public enum DelayedRequestDisposition {
+    public enum DelayedRequestDisposition : Sendable {
         case cancel
         case continueLoading
         case useNewRequest
     }
 }
 
-fileprivate let globalVarSyncQ = DispatchQueue(label: "org.swift.Foundation.URLSession.GlobalVarSyncQ")
-fileprivate var sessionCounter = Int32(0)
+fileprivate let sessionCounter = Atomic<Int32>(0)
 fileprivate func nextSessionIdentifier() -> Int32 {
-    return globalVarSyncQ.sync {
-        sessionCounter += 1
-        return sessionCounter
-    }
+    let (_, new) = sessionCounter.add(1, ordering: .relaxed)
+    return new
 }
 public let NSURLSessionTransferSizeUnknown: Int64 = -1
 
-open class URLSession : NSObject {
+open class URLSession : NSObject, @unchecked Sendable {
     internal let _configuration: _Configuration
     fileprivate let multiHandle: _MultiHandle
     fileprivate var nextTaskIdentifier = 1
     internal let workQueue: DispatchQueue 
     internal let taskRegistry = URLSession._TaskRegistry()
     fileprivate let identifier: Int32
+    // written to on workQueue, read from workQueue and elsewhere. Inherently somewhat racy, then, because it can change after reading the value asynchronously.
     fileprivate var invalidated = false
     fileprivate static let registerProtocols: () = {
         // TODO: We register all the native protocols here.
@@ -218,6 +217,8 @@ open class URLSession : NSObject {
         return URLSession(configuration: configuration, delegate: nil, delegateQueue: nil)
     }()
 
+    private static let sharedQueue = DispatchQueue(label: "org.swift.URLSession.SharedQueue")
+
     /*
      * Customization of URLSession occurs during creation of a new session.
      * If you only need to use the convenience routines with custom
@@ -228,7 +229,7 @@ open class URLSession : NSObject {
     public /*not inherited*/ init(configuration: URLSessionConfiguration) {
         initializeLibcurl()
         identifier = nextSessionIdentifier()
-        self.workQueue = DispatchQueue(label: "URLSession<\(identifier)>")
+        self.workQueue = DispatchQueue(label: "URLSession<\(identifier)>", target: Self.sharedQueue)
         self.delegateQueue = OperationQueue()
         self.delegateQueue.maxConcurrentOperationCount = 1
         self.delegate = nil
@@ -250,7 +251,7 @@ open class URLSession : NSObject {
     public /*not inherited*/ init(configuration: URLSessionConfiguration, delegate: URLSessionDelegate?, delegateQueue queue: OperationQueue?) {
         initializeLibcurl()
         identifier = nextSessionIdentifier()
-        self.workQueue = DispatchQueue(label: "URLSession<\(identifier)>")
+        self.workQueue = DispatchQueue(label: "URLSession<\(identifier)>", target: Self.sharedQueue)
         if let _queue = queue {
            self.delegateQueue = _queue
         } else {
@@ -347,7 +348,7 @@ open class URLSession : NSObject {
     }
     
     /* empty all cookies, cache and credential stores, removes disk files, issues -flushWithCompletionHandler:. Invokes completionHandler() on the delegate queue. */
-    open func reset(completionHandler: @escaping () -> Void) {
+    open func reset(completionHandler: @Sendable @escaping () -> Void) {
         let configuration = self.configuration
         
         DispatchQueue.global(qos: .background).async {
@@ -365,7 +366,7 @@ open class URLSession : NSObject {
     }
     
      /* flush storage to disk and clear transient network caches.  Invokes completionHandler() on the delegate queue. */
-    open func flush(completionHandler: @escaping () -> Void) {
+    open func flush(completionHandler: @Sendable @escaping () -> Void) {
         // We create new CURL handles every request.
         delegateQueue.addOperation {
             completionHandler()
@@ -373,12 +374,12 @@ open class URLSession : NSObject {
     }
 
     @available(*, unavailable, renamed: "getTasksWithCompletionHandler(_:)")
-    open func getTasksWithCompletionHandler(completionHandler: @escaping ([URLSessionDataTask], [URLSessionUploadTask], [URLSessionDownloadTask]) -> Void) {
+    open func getTasksWithCompletionHandler(completionHandler: @Sendable @escaping ([URLSessionDataTask], [URLSessionUploadTask], [URLSessionDownloadTask]) -> Void) {
         getTasksWithCompletionHandler(completionHandler)
     }
 
     /* invokes completionHandler with outstanding data, upload and download tasks. */
-    open func getTasksWithCompletionHandler(_ completionHandler: @escaping ([URLSessionDataTask], [URLSessionUploadTask], [URLSessionDownloadTask]) -> Void)  {
+    open func getTasksWithCompletionHandler(_ completionHandler: @Sendable @escaping ([URLSessionDataTask], [URLSessionUploadTask], [URLSessionDownloadTask]) -> Void)  {
         workQueue.async {
             self.delegateQueue.addOperation {
                 var dataTasks = [URLSessionDataTask]()
@@ -404,7 +405,7 @@ open class URLSession : NSObject {
     }
     
     /* invokes completionHandler with all outstanding tasks. */
-    open func getAllTasks(completionHandler: @escaping ([URLSessionTask]) -> Void)  {
+    open func getAllTasks(completionHandler: @Sendable @escaping ([URLSessionTask]) -> Void)  {
         workQueue.async {
             self.delegateQueue.addOperation {
                 completionHandler(self.taskRegistry.allTasks.filter { $0.state == .running || $0.isSuspendedAfterResume })
@@ -435,11 +436,11 @@ open class URLSession : NSObject {
      * see <Foundation/NSURLError.h>.  The delegate, if any, will still be
      * called for authentication challenges.
      */
-    open func dataTask(with request: URLRequest, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTask {
+    open func dataTask(with request: URLRequest, completionHandler: @Sendable @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTask {
         return dataTask(with: _Request(request), behaviour: .dataCompletionHandler(completionHandler))
     }
 
-    open func dataTask(with url: URL, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTask {
+    open func dataTask(with url: URL, completionHandler: @Sendable @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTask {
         return dataTask(with: _Request(url), behaviour: .dataCompletionHandler(completionHandler))
     }
     
@@ -464,12 +465,12 @@ open class URLSession : NSObject {
     /*
      * upload convenience method.
      */
-    open func uploadTask(with request: URLRequest, fromFile fileURL: URL, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionUploadTask {
+    open func uploadTask(with request: URLRequest, fromFile fileURL: URL, completionHandler: @Sendable @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionUploadTask {
         let r = URLSession._Request(request)
         return uploadTask(with: r, body: .file(fileURL), behaviour: .dataCompletionHandler(completionHandler))
     }
 
-    open func uploadTask(with request: URLRequest, from bodyData: Data?, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionUploadTask {
+    open func uploadTask(with request: URLRequest, from bodyData: Data?, completionHandler: @Sendable @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionUploadTask {
         return uploadTask(with: _Request(request), body: .data(createDispatchData(bodyData!)), behaviour: .dataCompletionHandler(completionHandler))
     }
     
@@ -495,15 +496,15 @@ open class URLSession : NSObject {
      * copied during the invocation of the completion routine.  The file
      * will be removed automatically.
      */
-    open func downloadTask(with request: URLRequest, completionHandler: @escaping (URL?, URLResponse?, Error?) -> Void) -> URLSessionDownloadTask {
+    open func downloadTask(with request: URLRequest, completionHandler: @Sendable @escaping (URL?, URLResponse?, Error?) -> Void) -> URLSessionDownloadTask {
         return downloadTask(with: _Request(request), behavior: .downloadCompletionHandler(completionHandler))
     }
 
-    open func downloadTask(with url: URL, completionHandler: @escaping (URL?, URLResponse?, Error?) -> Void) -> URLSessionDownloadTask {
+    open func downloadTask(with url: URL, completionHandler: @Sendable @escaping (URL?, URLResponse?, Error?) -> Void) -> URLSessionDownloadTask {
        return downloadTask(with: _Request(url), behavior: .downloadCompletionHandler(completionHandler))
     }
 
-    open func downloadTask(withResumeData resumeData: Data, completionHandler: @escaping (URL?, URLResponse?, Error?) -> Void) -> URLSessionDownloadTask {
+    open func downloadTask(withResumeData resumeData: Data, completionHandler: @Sendable @escaping (URL?, URLResponse?, Error?) -> Void) -> URLSessionDownloadTask {
         return invalidDownloadTask(behavior: .downloadCompletionHandler(completionHandler))
     }
     
@@ -648,20 +649,239 @@ internal extension URLSession {
         /// Default action for all events, except for completion.
         /// - SeeAlso: URLSession.TaskRegistry.Behaviour.dataCompletionHandler
         case dataCompletionHandler(URLSession._TaskRegistry.DataTaskCompletion)
+        /// Default action for all asynchronous events.
+        /// - SeeAlso: URLsession.TaskRegistry.Behaviour.dataCompletionHandlerWithTaskDelegate
+        case dataCompletionHandlerWithTaskDelegate(URLSession._TaskRegistry.DataTaskCompletion, URLSessionTaskDelegate)
         /// Default action for all events, except for completion.
         /// - SeeAlso: URLSession.TaskRegistry.Behaviour.downloadCompletionHandler
         case downloadCompletionHandler(URLSession._TaskRegistry.DownloadTaskCompletion)
+        /// Default action for all asynchronous events.
+        /// - SeeAlso: URLsession.TaskRegistry.Behaviour.downloadCompletionHandlerWithTaskDelegate
+        case downloadCompletionHandlerWithTaskDelegate(URLSession._TaskRegistry.DownloadTaskCompletion, URLSessionTaskDelegate)
     }
 
     func behaviour(for task: URLSessionTask) -> _TaskBehaviour {
         switch taskRegistry.behaviour(for: task) {
         case .dataCompletionHandler(let c): return .dataCompletionHandler(c)
+        case .dataCompletionHandlerWithTaskDelegate(let c, let d):
+            guard let d else {
+                return .dataCompletionHandler(c)
+            }
+            return .dataCompletionHandlerWithTaskDelegate(c, d)
         case .downloadCompletionHandler(let c): return .downloadCompletionHandler(c)
+        case .downloadCompletionHandlerWithTaskDelegate(let c, let d):
+            guard let d else {
+                return .downloadCompletionHandler(c)
+            }
+            return .downloadCompletionHandlerWithTaskDelegate(c, d)
         case .callDelegate:
             guard let d = delegate as? URLSessionTaskDelegate else {
                 return .noDelegate
             }
             return .taskDelegate(d)
+        }
+    }
+}
+
+fileprivate extension URLSession {
+    final class CancelState: Sendable {
+        struct State {
+            var isCancelled: Bool
+            var task: URLSessionTask?
+        }
+        
+        let lock = Mutex<State>(State(isCancelled: false, task: nil))
+        init() {
+        }
+
+        func cancel() {
+            let task = lock.withLock { state in
+                state.isCancelled = true
+                let result = state.task
+                state.task = nil
+                return result
+            }
+            task?.cancel()
+        }
+
+        func activate(task: URLSessionTask) {
+            let taskUsed = lock.withLock { state in
+                if state.task != nil {
+                    fatalError("Cannot activate twice")
+                }
+                if state.isCancelled {
+                    return false
+                } else {
+                    state.isCancelled = false
+                    state.task = task
+                    return true
+                }
+            }
+
+            if !taskUsed {
+                task.cancel()
+            }
+        }
+    }
+}
+
+@available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *)
+extension URLSession {
+    /// Convenience method to load data using a URLRequest, creates and resumes a URLSessionDataTask internally.
+    ///
+    /// - Parameter request: The URLRequest for which to load data.
+    /// - Parameter delegate: Task-specific delegate.
+    /// - Returns: Data and response.
+    public func data(for request: URLRequest, delegate: URLSessionTaskDelegate? = nil) async throws -> (Data, URLResponse) {
+        let cancelState = CancelState()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let completionHandler: URLSession._TaskRegistry.DataTaskCompletion = { data, response, error in
+                    if let error = error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume(returning: (data!, response!))
+                    }
+                }
+                let task = dataTask(with: _Request(request), behaviour: .dataCompletionHandlerWithTaskDelegate(completionHandler, delegate))
+                task._callCompletionHandlerInline = true
+                task.resume()
+                cancelState.activate(task: task)
+            }
+        } onCancel: {
+            cancelState.cancel()
+        }
+    }
+
+    /// Convenience method to load data using a URL, creates and resumes a URLSessionDataTask internally.
+    ///
+    /// - Parameter url: The URL for which to load data.
+    /// - Parameter delegate: Task-specific delegate.
+    /// - Returns: Data and response.
+    public func data(from url: URL, delegate: URLSessionTaskDelegate? = nil) async throws -> (Data, URLResponse) {
+        let cancelState = CancelState()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let completionHandler: URLSession._TaskRegistry.DataTaskCompletion = { data, response, error in
+                    if let error = error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume(returning: (data!, response!))
+                    }
+                }
+                let task = dataTask(with: _Request(url), behaviour: .dataCompletionHandlerWithTaskDelegate(completionHandler, delegate))
+                task._callCompletionHandlerInline = true
+                task.resume()
+                cancelState.activate(task: task)
+            }
+        } onCancel: {
+            cancelState.cancel()
+        }
+    }
+
+    /// Convenience method to upload data using a URLRequest, creates and resumes a URLSessionUploadTask internally.
+    ///
+    /// - Parameter request: The URLRequest for which to upload data.
+    /// - Parameter fileURL: File to upload.
+    /// - Parameter delegate: Task-specific delegate.
+    /// - Returns: Data and response.
+    public func upload(for request: URLRequest, fromFile fileURL: URL, delegate: URLSessionTaskDelegate? = nil) async throws -> (Data, URLResponse) {
+        let cancelState = CancelState()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let completionHandler: URLSession._TaskRegistry.DataTaskCompletion = { data, response, error in
+                    if let error = error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume(returning: (data!, response!))
+                    }
+                }
+                let task = uploadTask(with: _Request(request), body: .file(fileURL), behaviour: .dataCompletionHandlerWithTaskDelegate(completionHandler, delegate))
+                task._callCompletionHandlerInline = true
+                task.resume()
+                cancelState.activate(task: task)
+            }
+        } onCancel: {
+            cancelState.cancel()
+        }
+    }
+
+    /// Convenience method to upload data using a URLRequest, creates and resumes a URLSessionUploadTask internally.
+    ///
+    /// - Parameter request: The URLRequest for which to upload data.
+    /// - Parameter bodyData: Data to upload.
+    /// - Parameter delegate: Task-specific delegate.
+    /// - Returns: Data and response.
+    public func upload(for request: URLRequest, from bodyData: Data, delegate: URLSessionTaskDelegate? = nil) async throws -> (Data, URLResponse) {
+        let cancelState = CancelState()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let completionHandler: URLSession._TaskRegistry.DataTaskCompletion = { data, response, error in
+                    if let error = error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume(returning: (data!, response!))
+                    }
+                }
+                let task = uploadTask(with: _Request(request), body: .data(createDispatchData(bodyData)), behaviour: .dataCompletionHandlerWithTaskDelegate(completionHandler, delegate))
+                task._callCompletionHandlerInline = true
+                task.resume()
+                cancelState.activate(task: task)
+            }
+        } onCancel: {
+            cancelState.cancel()
+        }
+    }
+
+    /// Convenience method to download using a URLRequest, creates and resumes a URLSessionDownloadTask internally.
+    ///
+    /// - Parameter request: The URLRequest for which to download.
+    /// - Parameter delegate: Task-specific delegate.
+    /// - Returns: Downloaded file URL and response. The file will not be removed automatically.
+    public func download(for request: URLRequest, delegate: URLSessionTaskDelegate? = nil) async throws -> (URL, URLResponse) {
+        let cancelState = CancelState()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let completionHandler: URLSession._TaskRegistry.DownloadTaskCompletion = { location, response, error in
+                    if let error = error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume(returning: (location!, response!))
+                    }
+                }
+                let task = downloadTask(with: _Request(request), behavior: .downloadCompletionHandlerWithTaskDelegate(completionHandler, delegate))
+                task._callCompletionHandlerInline = true
+                task.resume()
+                cancelState.activate(task: task)
+            }
+        } onCancel: {
+            cancelState.cancel()
+        }
+    }
+
+    /// Convenience method to download using a URL, creates and resumes a URLSessionDownloadTask internally.
+    ///
+    /// - Parameter url: The URL for which to download.
+    /// - Parameter delegate: Task-specific delegate.
+    /// - Returns: Downloaded file URL and response. The file will not be removed automatically.
+    public func download(from url: URL, delegate: URLSessionTaskDelegate? = nil) async throws -> (URL, URLResponse) {
+        let cancelState = CancelState()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let completionHandler: URLSession._TaskRegistry.DownloadTaskCompletion = { location, response, error in
+                    if let error = error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume(returning: (location!, response!))
+                    }
+                }
+                let task = downloadTask(with: _Request(url), behavior: .downloadCompletionHandlerWithTaskDelegate(completionHandler, delegate))
+                task._callCompletionHandlerInline = true
+                task.resume()
+                cancelState.activate(task: task)
+            }
+        } onCancel: {
+            cancelState.cancel()
         }
     }
 }

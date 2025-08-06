@@ -35,8 +35,8 @@ import Foundation
 ///
 /// A background session can be used to perform networking operations
 /// on behalf of a suspended application, within certain constraints.
-open class URLSessionConfiguration : NSObject, NSCopying {
-    // -init is silently incorrect in URLSessionCofiguration on the desktop. Ensure code that relied on swift-corelibs-foundation's init() being functional is redirected to the appropriate cross-platform class property.
+open class URLSessionConfiguration : NSObject, NSCopying, @unchecked Sendable {
+    // -init is silently incorrect in URLSessionConfiguration on the desktop. Ensure code that relied on swift-corelibs-foundation's init() being functional is redirected to the appropriate cross-platform class property.
     @available(*, deprecated, message: "Use .default instead.", renamed: "URLSessionConfiguration.default")
     public override init() {
         self.requestCachePolicy = URLSessionConfiguration.default.requestCachePolicy
@@ -204,6 +204,7 @@ open class URLSessionConfiguration : NSObject, NSCopying {
      */
     
     /* Allow the use of HTTP pipelining */
+    @available(swift, deprecated: 6.1, message: "HTTP/1 pipelining has known compatibility issues, please adopt HTTP/2 and HTTP/3 instead")
     open var httpShouldUsePipelining: Bool
     
     /* Allow the session to set cookies on requests */
@@ -216,14 +217,9 @@ open class URLSessionConfiguration : NSObject, NSCopying {
      Note that these headers are added to the request only if not already present. */
     open var httpAdditionalHeaders: [AnyHashable : Any]? = nil
     
-    #if NS_CURL_MISSING_MAX_HOST_CONNECTIONS
     /* The maximum number of simultaneous persistent connections per host */
-    @available(*, deprecated, message: "This platform doles not support selecting the maximum number of simultaneous persistent connections per host. This property is ignored.")
+    /* On platforms with NS_CURL_MISSING_MAX_HOST_CONNECTIONS, this property is ignored. */
     open var httpMaximumConnectionsPerHost: Int
-    #else
-    /* The maximum number of simultaneous persistent connections per host */
-    open var httpMaximumConnectionsPerHost: Int
-    #endif
     
     /* The cookie storage object to use, or nil to indicate that no cookies should be handled */
     open var httpCookieStorage: HTTPCookieStorage?
@@ -234,9 +230,7 @@ open class URLSessionConfiguration : NSObject, NSCopying {
     /* The URL resource cache, or nil to indicate that no caching is to be performed */
     open var urlCache: URLCache?
     
-    /* Enable extended background idle mode for any tcp sockets created.    Enabling this mode asks the system to keep the socket open
-     *  and delay reclaiming it when the process moves to the background (see https://developer.apple.com/library/ios/technotes/tn2277/_index.html)
-     */
+    @available(swift, deprecated: 6.1, message: "Not supported")
     open var shouldUseExtendedBackgroundIdleMode: Bool
     
     /* An optional array of Class objects which subclass URLProtocol.
@@ -258,11 +252,15 @@ open class URLSessionConfiguration : NSObject, NSCopying {
      @available(*, unavailable, message: "Not available on non-Darwin platforms")
      open var multipathServiceType: URLSessionConfiguration.MultipathServiceType { NSUnsupported() }
 
+    /* Uses the classic network loader */
+    @available(*, unavailable, message: "Not available on non-Darwin platforms")
+    open var usesClassicLoadingMode: Bool { NSUnsupported() }
+
 }
 
 @available(*, unavailable, message: "Not available on non-Darwin platforms")
 extension URLSessionConfiguration {
-    public enum MultipathServiceType {
+    public enum MultipathServiceType : Sendable {
         case none
         case handover
         case interactive

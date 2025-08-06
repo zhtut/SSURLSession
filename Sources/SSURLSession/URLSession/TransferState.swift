@@ -22,7 +22,6 @@ import Foundation
 #else
 import Foundation
 #endif
-@_implementationOnly import CoreFoundation
 
 
 

@@ -13,8 +13,7 @@ import Foundation
 import Foundation
 #endif
 
-@_implementationOnly import CoreFoundation
-@_implementationOnly import CFURLSessionInterface
+@_implementationOnly import _CFURLSessionInterface
 import Dispatch
 
 internal class _WebSocketURLProtocol: _HTTPURLProtocol {
@@ -134,9 +133,16 @@ internal class _WebSocketURLProtocol: _HTTPURLProtocol {
         guard let t = self.task else {
             fatalError("Cannot notify")
         }
-        guard case .taskDelegate = t.session.behaviour(for: self.task!),
-              let task = self.task as? URLSessionWebSocketTask else {
-            fatalError("WebSocket internal invariant violated")
+        switch t.session.behaviour(for: t) {
+        case .noDelegate:
+            break
+        case .taskDelegate:
+            break
+        default:
+            fatalError("Unexpected behaviour for URLSessionWebSocketTask")
+        }
+        guard let task = t as? URLSessionWebSocketTask else {
+            fatalError("Cast to URLSessionWebSocketTask failed")
         }
         
         // Buffer the response message in the task
